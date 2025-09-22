@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小组评价系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <h1 class="nav-title">小组评价系统</h1>
+                <div class="nav-buttons">
+                    <button id="adminBtn" class="nav-btn">后台管理</button>
+                    <button id="rankingBtn" class="nav-btn">查看排名</button>
+                    <button id="displayBtn" class="nav-btn active">大屏展示</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 大屏展示页面 -->
+        <div id="displayPage" class="page active">
+            <!-- 小组切换按钮 -->
+            <div class="group-tabs">
+                <div id="groupTabs" class="tabs-container"></div>
+            </div>
+
+            <!-- 主要内容区域 -->
+            <div class="main-content">
+                <!-- 左侧：小组成员 -->
+                <div class="left-panel">
+                    <h3>小组成员</h3>
+                    <div id="membersList" class="members-list"></div>
+                </div>
+
+                <!-- 中间：小组信息和投票统计 -->
+                <div class="center-panel">
+                    <div class="group-header">
+                        <img id="groupLogo" class="group-logo" src="" alt="小组Logo">
+                        <h2 id="groupName" class="group-name">请选择小组</h2>
+                    </div>
+                    
+                    <div class="vote-stats">
+                        <div class="stat-item like">
+                            <div class="stat-icon">👍</div>
+                            <div class="stat-number" id="likeCount">0</div>
+                            <div class="stat-label">赞</div>
+                        </div>
+                        <div class="stat-item dislike">
+                            <div class="stat-icon">👎</div>
+                            <div class="stat-number" id="dislikeCount">0</div>
+                            <div class="stat-label">踩</div>
+                        </div>
+                    </div>
+
+                    <div class="qr-section">
+                        <div id="qrcode" class="qr-code"></div>
+                        <p class="qr-text">扫码进行评价</p>
+                    </div>
+                </div>
+
+                <!-- 右侧：照片轮播 -->
+                <div class="right-panel">
+                    <h3>小组风采</h3>
+                    <div id="photoCarousel" class="photo-carousel">
+                        <div class="carousel-container">
+                            <div id="photoSlides" class="photo-slides"></div>
+                        </div>
+                        <div class="carousel-dots" id="carouselDots"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 后台管理页面 -->
+        <div id="adminPage" class="page">
+            <div class="admin-container">
+                <div class="admin-tabs">
+                    <button class="admin-tab active" data-tab="groups">小组管理</button>
+                    <button class="admin-tab" data-tab="voters">评价人管理</button>
+                    <button class="admin-tab" data-tab="roles">职务管理</button>
+                    <button class="admin-tab" data-tab="init">初始化数据</button>
+                </div>
+
+                <!-- 小组管理 -->
+                <div id="groupsTab" class="admin-content active">
+                    <div class="admin-header">
+                        <h3>小组管理</h3>
+                        <button id="addGroupBtn" class="btn btn-primary">添加小组</button>
+                    </div>
+                    <div id="groupsList" class="admin-list"></div>
+                </div>
+
+                <!-- 评价人管理 -->
+                <div id="votersTab" class="admin-content">
+                    <div class="admin-header">
+                        <h3>评价人管理</h3>
+                        <button id="addVoterBtn" class="btn btn-primary">添加评价人</button>
+                    </div>
+                    <div id="votersList" class="admin-list"></div>
+                </div>
+
+                <!-- 职务管理 -->
+                <div id="rolesTab" class="admin-content">
+                    <div class="admin-header">
+                        <h3>职务管理</h3>
+                        <button id="addRoleBtn" class="btn btn-primary">添加职务</button>
+                    </div>
+                    <div id="rolesList" class="admin-list"></div>
+                </div>
+
+                <!-- 初始化数据 -->
+                <div id="initTab" class="admin-content">
+                    <div class="admin-header">
+                        <h3>初始化数据</h3>
+                        <button id="initDataBtn" class="btn btn-primary">初始化示例数据</button>
+                    </div>
+                    <p>点击按钮将创建示例的小组、职务和评价人数据，方便快速开始使用系统。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 排名页面 -->
+        <div id="rankingPage" class="page">
+            <div class="ranking-container">
+                <h2 class="ranking-title">最终排名</h2>
+                <div id="rankingDisplay" class="ranking-display"></div>
+            </div>
+        </div>
+
+        <!-- 手机端评价页面 -->
+        <div id="mobilePage" class="page mobile-page">
+            <!-- 身份验证步骤 -->
+            <div id="verifyStep" class="mobile-step active">
+                <div class="mobile-container">
+                    <h2>身份验证</h2>
+                    <form id="verifyForm" class="mobile-form">
+                        <div class="form-group">
+                            <label>姓名</label>
+                            <input type="text" id="voterName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>手机号</label>
+                            <input type="tel" id="voterPhone" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">验证身份</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 投票步骤 -->
+            <div id="voteStep" class="mobile-step">
+                <div class="mobile-container">
+                    <h2 id="voteGroupName">小组评价</h2>
+                    <p id="voterInfo" class="voter-info"></p>
+                    <div class="vote-buttons">
+                        <button id="likeBtn" class="vote-btn like-btn">
+                            <div class="vote-icon">👍</div>
+                            <div class="vote-text">赞一票</div>
+                        </button>
+                        <button id="dislikeBtn" class="vote-btn dislike-btn">
+                            <div class="vote-icon">👎</div>
+                            <div class="vote-text">踩一脚</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 完成步骤 -->
+            <div id="completeStep" class="mobile-step">
+                <div class="mobile-container">
+                    <h2>投票完成</h2>
+                    <div class="success-icon">✅</div>
+                    <p>感谢您的参与！</p>
+                    <button id="backToVerifyBtn" class="btn btn-secondary btn-full">返回</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
