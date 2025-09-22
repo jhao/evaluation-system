@@ -1,15 +1,18 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from src.models.evaluation import db, Group, Role, Member, Voter, Vote
 import os
 from werkzeug.utils import secure_filename
 import uuid
+import pandas as pd
+import openpyxl
+from io import BytesIO
 
 evaluation_bp = Blueprint('evaluation', __name__)
 
 # 文件上传配置
 UPLOAD_FOLDER = 'src/static/uploads'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'xlsx', 'xls'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -172,6 +175,124 @@ def delete_voter(voter_id):
     db.session.delete(voter)
     db.session.commit()
     return '', 204
+
+@evaluation_bp.route('/voters/import', methods=['POST'])
+def import_voters():
+    """批量导入评价人"""
+    if 'file' not in request.files:
+        return jsonify({'error': '没有上传文件'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '没有选择文件'}), 400
+    
+    if not file or not allowed_file(file.filename):
+        return jsonify({'error': '文件格式不支持，请上传Excel文件(.xlsx或.xls)'}), 400
+    
+    try:
+        # 读取Excel文件
+        df = pd.read_excel(file)
+        
+        # 验证必需的列
+        required_columns = ['姓名', '手机号']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return jsonify({'error': f'Excel文件缺少必需的列: {", ".join(missing_columns)}'}), 400
+        
+        # 处理数据
+        success_count = 0
+        error_count = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                name = str(row['姓名']).strip()
+                phone = str(row['手机号']).strip()
+                weight = int(row.get('权重', 1))  # 默认权重为1
+                
+                if not name or not phone:
+                    errors.append(f'第{index+2}行: 姓名或手机号为空')
+                    error_count += 1
+                    continue
+                
+                # 检查是否已存在
+                existing_voter = Voter.query.filter_by(phone=phone).first()
+                if existing_voter:
+                    errors.append(f'第{index+2}行: 手机号{phone}已存在')
+                    error_count += 1
+                    continue
+                
+                # 创建新评价人
+                voter = Voter(name=name, phone=phone, weight=weight)
+                db.session.add(voter)
+                success_count += 1
+                
+            except Exception as e:
+                errors.append(f'第{index+2}行: {str(e)}')
+                error_count += 1
+        
+        db.session.commit()
+        
+        result = {
+            'success_count': success_count,
+            'error_count': error_count,
+            'errors': errors[:10]  # 只返回前10个错误
+        }
+        
+        if error_count > 0:
+            result['message'] = f'导入完成，成功{success_count}条，失败{error_count}条'
+        else:
+            result['message'] = f'导入成功，共{success_count}条记录'
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': f'文件处理失败: {str(e)}'}), 500
+
+@evaluation_bp.route('/voters/template', methods=['GET'])
+def download_voters_template():
+    """下载评价人导入模板"""
+    try:
+        # 创建Excel模板
+        data = {
+            '姓名': ['张三', '李四', '王五'],
+            '手机号': ['13800138001', '13800138002', '13800138003'],
+            '权重': [10, 1, 1]
+        }
+        df = pd.DataFrame(data)
+        
+        # 创建BytesIO对象
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='评价人模板')
+            
+            # 添加说明
+            workbook = writer.book
+            worksheet = writer.sheets['评价人模板']
+            
+            # 添加说明行
+            worksheet.insert_rows(1, 3)
+            worksheet['A1'] = '评价人导入模板'
+            worksheet['A2'] = '说明：姓名和手机号为必填项，权重默认为1（老师建议设为10）'
+            worksheet['A3'] = ''
+            
+            # 设置样式
+            from openpyxl.styles import Font, Alignment
+            worksheet['A1'].font = Font(bold=True, size=14)
+            worksheet['A2'].font = Font(size=10)
+            worksheet['A1'].alignment = Alignment(horizontal='center')
+        
+        output.seek(0)
+        
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name='评价人导入模板.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'模板生成失败: {str(e)}'}), 500
 
 # ==================== 投票相关API ====================
 

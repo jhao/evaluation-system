@@ -58,8 +58,9 @@
                     </div>
 
                     <div class="qr-section">
-                        <div id="qrcode" class="qr-code"></div>
+                        <div id="qrcode" class="qr-code" onclick="openMobilePage()"></div>
                         <p class="qr-text">扫码进行评价</p>
+                        <button id="openMobileBtn" class="btn btn-secondary" onclick="openMobilePage()">点击进入评价页面</button>
                     </div>
                 </div>
 
@@ -99,7 +100,11 @@
                 <div id="votersTab" class="admin-content">
                     <div class="admin-header">
                         <h3>评价人管理</h3>
-                        <button id="addVoterBtn" class="btn btn-primary">添加评价人</button>
+                        <div class="admin-actions">
+                            <button id="downloadTemplateBtn" class="btn btn-secondary">下载模板</button>
+                            <button id="importVotersBtn" class="btn btn-info">批量导入</button>
+                            <button id="addVoterBtn" class="btn btn-primary">添加评价人</button>
+                        </div>
                     </div>
                     <div id="votersList" class="admin-list"></div>
                 </div>
@@ -189,6 +194,9 @@
             <div id="modalBody"></div>
         </div>
     </div>
+
+    <!-- 隐藏的文件上传input -->
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
 
     <script src="app.js"></script>
 </body>

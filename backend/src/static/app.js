@@ -137,6 +137,48 @@ function setupEventListeners() {
             currentVoter = null;
         });
     }
+    
+    // 后台管理按钮事件绑定
+    setupAdminButtonEvents();
+}
+
+// 设置后台管理按钮事件
+function setupAdminButtonEvents() {
+    // 添加小组按钮
+    const addGroupBtn = document.getElementById('addGroupBtn');
+    if (addGroupBtn) {
+        addGroupBtn.addEventListener('click', showAddGroupModal);
+    }
+    
+    // 添加评价人按钮
+    const addVoterBtn = document.getElementById('addVoterBtn');
+    if (addVoterBtn) {
+        addVoterBtn.addEventListener('click', showAddVoterModal);
+    }
+    
+    // 添加职务按钮
+    const addRoleBtn = document.getElementById('addRoleBtn');
+    if (addRoleBtn) {
+        addRoleBtn.addEventListener('click', showAddRoleModal);
+    }
+    
+    // 下载模板按钮
+    const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+    if (downloadTemplateBtn) {
+        downloadTemplateBtn.addEventListener('click', downloadVotersTemplate);
+    }
+    
+    // 批量导入按钮
+    const importVotersBtn = document.getElementById('importVotersBtn');
+    if (importVotersBtn) {
+        importVotersBtn.addEventListener('click', showImportVotersModal);
+    }
+    
+    // 文件选择事件
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileImport);
+    }
 }
 
 // 加载初始数据
@@ -374,7 +416,8 @@ function generateQRCode() {
     
     qrContainer.innerHTML = '';
     
-    const qrUrl = `${window.location.origin}?group=${currentGroup.id}`;
+    // 生成指向独立手机评价页面的URL
+    const qrUrl = `${window.location.origin}/mobile?group=${currentGroup.id}`;
     
     QRCode.toCanvas(qrContainer, qrUrl, {
         width: 200,
@@ -387,9 +430,20 @@ function generateQRCode() {
     }, function(error) {
         if (error) {
             console.error('生成二维码失败:', error);
-            qrContainer.innerHTML = '<p>二维码生成失败</p>';
+            qrContainer.innerHTML = '<p style="color: #B0C4DE;">二维码生成失败</p>';
         }
     });
+}
+
+// 打开手机端评价页面
+function openMobilePage() {
+    if (!currentGroup) {
+        showMessage('请先选择一个小组', 'error');
+        return;
+    }
+    
+    const mobileUrl = `${window.location.origin}/mobile?group=${currentGroup.id}`;
+    window.open(mobileUrl, '_blank');
 }
 
 // 显示手机端页面
@@ -704,6 +758,103 @@ function showModal(title, content) {
     modal.classList.add('active');
 }
 
+// 编辑小组
+function editGroup(groupId) {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+    
+    const content = `
+        <h3>编辑小组</h3>
+        <form id="editGroupForm">
+            <div class="form-group">
+                <label for="editGroupName">小组名称:</label>
+                <input type="text" id="editGroupName" name="name" value="${group.name}" required>
+            </div>
+            <div class="form-group">
+                <label for="editGroupLogo">小组Logo URL:</label>
+                <input type="url" id="editGroupLogo" name="logo" value="${group.logo || ''}">
+            </div>
+            <div class="form-actions">
+                <button type="submit">保存</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+    
+    document.getElementById('editGroupForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        const data = Object.fromEntries(formData);
+        
+        try {
+            await apiCall(`/groups/${groupId}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+            
+            showMessage('小组更新成功', 'success');
+            closeModal();
+            loadAdminGroups();
+            loadGroups();
+        } catch (error) {
+            showMessage('更新失败: ' + error.message, 'error');
+        }
+    });
+}
+
+// 编辑评价人
+function editVoter(voterId) {
+    const voter = voters.find(v => v.id === voterId);
+    if (!voter) return;
+    
+    const content = `
+        <h3>编辑评价人</h3>
+        <form id="editVoterForm">
+            <div class="form-group">
+                <label for="editVoterName">姓名:</label>
+                <input type="text" id="editVoterName" name="name" value="${voter.name}" required>
+            </div>
+            <div class="form-group">
+                <label for="editVoterPhone">手机号:</label>
+                <input type="tel" id="editVoterPhone" name="phone" value="${voter.phone}" required>
+            </div>
+            <div class="form-group">
+                <label for="editVoterWeight">投票权重:</label>
+                <input type="number" id="editVoterWeight" name="weight" min="1" value="${voter.weight}" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit">保存</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+    
+    document.getElementById('editVoterForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        const data = Object.fromEntries(formData);
+        data.weight = parseInt(data.weight);
+        
+        try {
+            await apiCall(`/voters/${voterId}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+            
+            showMessage('评价人更新成功', 'success');
+            closeModal();
+            loadAdminVoters();
+            loadVoters();
+        } catch (error) {
+            showMessage('更新失败: ' + error.message, 'error');
+        }
+    });
+}
+
 // 后台管理操作函数
 async function toggleGroupLock(groupId, lock) {
     try {
@@ -769,6 +920,287 @@ async function initializeData() {
     } catch (error) {
         showMessage('初始化失败: ' + error.message, 'error');
     }
+}
+
+// 显示添加小组模态框
+function showAddGroupModal() {
+    const content = `
+        <h3>添加小组</h3>
+        <form id="addGroupForm">
+            <div class="form-group">
+                <label for="groupName">小组名称:</label>
+                <input type="text" id="groupName" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="groupLogo">小组Logo URL:</label>
+                <input type="url" id="groupLogo" name="logo">
+            </div>
+            <div class="form-actions">
+                <button type="submit">添加</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+    
+    document.getElementById('addGroupForm').addEventListener('submit', handleAddGroup);
+}
+
+// 显示添加评价人模态框
+function showAddVoterModal() {
+    const content = `
+        <h3>添加评价人</h3>
+        <form id="addVoterForm">
+            <div class="form-group">
+                <label for="voterName">姓名:</label>
+                <input type="text" id="voterName" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="voterPhone">手机号:</label>
+                <input type="tel" id="voterPhone" name="phone" required>
+            </div>
+            <div class="form-group">
+                <label for="voterWeight">投票权重:</label>
+                <input type="number" id="voterWeight" name="weight" min="1" value="1" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit">添加</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+    
+    document.getElementById('addVoterForm').addEventListener('submit', handleAddVoter);
+}
+
+// 显示添加职务模态框
+function showAddRoleModal() {
+    const content = `
+        <h3>添加职务</h3>
+        <form id="addRoleForm">
+            <div class="form-group">
+                <label for="roleName">职务名称:</label>
+                <input type="text" id="roleName" name="name" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit">添加</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+    
+    document.getElementById('addRoleForm').addEventListener('submit', handleAddRole);
+}
+
+// 关闭模态框
+function closeModal() {
+    const modal = document.getElementById('modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// 处理添加小组
+async function handleAddGroup(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        await apiCall('/groups', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        
+        showMessage('小组添加成功', 'success');
+        closeModal();
+        loadAdminGroups();
+        loadGroups();
+    } catch (error) {
+        showMessage('添加失败: ' + error.message, 'error');
+    }
+}
+
+// 处理添加评价人
+async function handleAddVoter(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    data.weight = parseInt(data.weight);
+    
+    try {
+        await apiCall('/voters', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        
+        showMessage('评价人添加成功', 'success');
+        closeModal();
+        loadAdminVoters();
+        loadVoters();
+    } catch (error) {
+        showMessage('添加失败: ' + error.message, 'error');
+    }
+}
+
+// 处理添加职务
+async function handleAddRole(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        await apiCall('/roles', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        
+        showMessage('职务添加成功', 'success');
+        closeModal();
+        loadAdminRoles();
+        loadRoles();
+    } catch (error) {
+        showMessage('添加失败: ' + error.message, 'error');
+    }
+}
+
+// 下载评价人导入模板
+function downloadVotersTemplate() {
+    const link = document.createElement('a');
+    link.href = API_BASE + '/voters/template';
+    link.download = '评价人导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 显示导入评价人模态框
+function showImportVotersModal() {
+    const content = `
+        <h3>批量导入评价人</h3>
+        <div class="import-instructions">
+            <p>请按照以下步骤进行批量导入：</p>
+            <ol>
+                <li>点击"下载模板"获取Excel模板文件</li>
+                <li>在模板中填写评价人信息（姓名、手机号为必填项）</li>
+                <li>权重默认为1，老师建议设为10</li>
+                <li>保存Excel文件后，点击"选择文件"上传</li>
+            </ol>
+        </div>
+        <div class="import-actions">
+            <button type="button" class="btn btn-secondary" onclick="downloadVotersTemplate()">下载模板</button>
+            <button type="button" class="btn btn-primary" onclick="selectImportFile()">选择文件</button>
+            <button type="button" class="btn btn-default" onclick="closeModal()">取消</button>
+        </div>
+        <div id="importProgress" class="import-progress" style="display: none;">
+            <p>正在导入，请稍候...</p>
+        </div>
+        <div id="importResult" class="import-result" style="display: none;"></div>
+    `;
+    showModal(content);
+}
+
+// 选择导入文件
+function selectImportFile() {
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.click();
+    }
+}
+
+// 处理文件导入
+async function handleFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // 显示进度
+    const progressDiv = document.getElementById('importProgress');
+    const resultDiv = document.getElementById('importResult');
+    
+    if (progressDiv) progressDiv.style.display = 'block';
+    if (resultDiv) {
+        resultDiv.style.display = 'none';
+        resultDiv.innerHTML = '';
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch(API_BASE + '/voters/import', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (progressDiv) progressDiv.style.display = 'none';
+        
+        if (response.ok) {
+            let resultHtml = `
+                <div class="import-success">
+                    <h4>导入结果</h4>
+                    <p>${result.message}</p>
+                    <p>成功导入: ${result.success_count} 条</p>
+                    ${result.error_count > 0 ? `<p>失败: ${result.error_count} 条</p>` : ''}
+                </div>
+            `;
+            
+            if (result.errors && result.errors.length > 0) {
+                resultHtml += `
+                    <div class="import-errors">
+                        <h5>错误详情:</h5>
+                        <ul>
+                            ${result.errors.map(error => `<li>${error}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (resultDiv) {
+                resultDiv.innerHTML = resultHtml;
+                resultDiv.style.display = 'block';
+            }
+            
+            // 刷新评价人列表
+            if (result.success_count > 0) {
+                loadAdminVoters();
+                loadVoters();
+            }
+            
+        } else {
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="import-error">
+                        <h4>导入失败</h4>
+                        <p>${result.error}</p>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        }
+        
+    } catch (error) {
+        if (progressDiv) progressDiv.style.display = 'none';
+        if (resultDiv) {
+            resultDiv.innerHTML = `
+                <div class="import-error">
+                    <h4>导入失败</h4>
+                    <p>网络错误或服务器异常</p>
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+        console.error('导入失败:', error);
+    }
+    
+    // 清空文件选择
+    event.target.value = '';
 }
 
 // 设置初始化按钮事件
