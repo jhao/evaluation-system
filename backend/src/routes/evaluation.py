@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from src.models.evaluation import db, Group, Role, Member, Voter, Vote
+from src.models.evaluation import db, Group, Role, Member, Voter, Vote, GroupPhoto
 import os
 from werkzeug.utils import secure_filename
 import uuid
@@ -371,6 +371,66 @@ def get_group_stats(group_id):
     group = Group.query.get_or_404(group_id)
     return jsonify(group.get_vote_stats())
 
+# ==================== 投票数据管理API ====================
+
+@evaluation_bp.route('/votes', methods=['GET'])
+def get_votes():
+    """获取投票数据"""
+    group_id = request.args.get('group_id')
+    
+    query = Vote.query
+    if group_id:
+        query = query.filter_by(group_id=group_id)
+    
+    votes = query.order_by(Vote.created_at.desc()).all()
+    return jsonify([vote.to_dict() for vote in votes])
+
+@evaluation_bp.route('/votes/<int:vote_id>', methods=['PUT'])
+def update_vote(vote_id):
+    """更新投票数据"""
+    vote = Vote.query.get_or_404(vote_id)
+    data = request.get_json()
+    
+    # 更新投票类型和权重
+    if 'vote_type' in data:
+        vote.vote_type = data['vote_type']
+    if 'vote_weight' in data:
+        vote.vote_weight = data['vote_weight']
+    
+    db.session.commit()
+    return jsonify(vote.to_dict())
+
+@evaluation_bp.route('/votes/<int:vote_id>', methods=['DELETE'])
+def delete_vote(vote_id):
+    """删除投票数据"""
+    vote = Vote.query.get_or_404(vote_id)
+    db.session.delete(vote)
+    db.session.commit()
+    return '', 204
+
+@evaluation_bp.route('/votes/batch-update', methods=['POST'])
+def batch_update_votes():
+    """批量更新投票数据"""
+    data = request.get_json()
+    updates = data.get('updates', [])
+    
+    try:
+        for update in updates:
+            vote_id = update.get('id')
+            vote = Vote.query.get(vote_id)
+            if vote:
+                if 'vote_type' in update:
+                    vote.vote_type = update['vote_type']
+                if 'vote_weight' in update:
+                    vote.vote_weight = update['vote_weight']
+        
+        db.session.commit()
+        return jsonify({'message': f'成功更新 {len(updates)} 条投票数据'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # ==================== 排名API ====================
 
 @evaluation_bp.route('/ranking', methods=['GET'])
@@ -398,6 +458,94 @@ def get_ranking():
         item['rank'] = i + 1
     
     return jsonify(ranking_data)
+
+# ==================== 小组照片管理API ====================
+
+@evaluation_bp.route('/groups/<int:group_id>/photos', methods=['POST'])
+def upload_group_photos(group_id):
+    """上传小组风采照片"""
+    try:
+        group = Group.query.get_or_404(group_id)
+        
+        if 'photos' not in request.files:
+            return jsonify({'error': '没有选择文件'}), 400
+        
+        files = request.files.getlist('photos')
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': '没有选择文件'}), 400
+        
+        uploaded_photos = []
+        upload_path = ensure_upload_dir()
+        
+        for file in files:
+            if file and file.filename:
+                # 检查文件类型
+                if not allowed_file(file.filename):
+                    continue
+                
+                # 生成安全的文件名
+                filename = secure_filename(file.filename)
+                timestamp = int(datetime.now().timestamp())
+                filename = f"group_{group_id}_{timestamp}_{filename}"
+                
+                # 保存文件
+                file_path = os.path.join(upload_path, filename)
+                file.save(file_path)
+                
+                # 保存到数据库
+                photo = GroupPhoto(
+                    group_id=group_id,
+                    filename=filename,
+                    original_name=file.filename
+                )
+                db.session.add(photo)
+                uploaded_photos.append({
+                    'filename': filename,
+                    'original_name': file.filename,
+                    'url': f'/uploads/{filename}'
+                })
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'成功上传 {len(uploaded_photos)} 张照片',
+            'photos': uploaded_photos
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@evaluation_bp.route('/groups/<int:group_id>/photos', methods=['GET'])
+def get_group_photos(group_id):
+    """获取小组风采照片"""
+    try:
+        photos = GroupPhoto.query.filter_by(group_id=group_id).all()
+        return jsonify([photo.to_dict() for photo in photos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@evaluation_bp.route('/groups/<int:group_id>/photos/<int:photo_id>', methods=['DELETE'])
+def delete_group_photo(group_id, photo_id):
+    """删除小组风采照片"""
+    try:
+        photo = GroupPhoto.query.filter_by(id=photo_id, group_id=group_id).first_or_404()
+        
+        # 删除文件
+        upload_path = ensure_upload_dir()
+        file_path = os.path.join(upload_path, photo.filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # 删除数据库记录
+        db.session.delete(photo)
+        db.session.commit()
+        
+        return jsonify({'message': '照片删除成功'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 # ==================== 文件上传API ====================
 

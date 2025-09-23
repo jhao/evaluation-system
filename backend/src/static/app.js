@@ -267,7 +267,6 @@ function selectGroup(group) {
     // 更新显示内容
     updateGroupDisplay();
     loadGroupMembers();
-    generateQRCode();
     
     // 加入WebSocket房间
     if (socket) {
@@ -293,7 +292,7 @@ function updateGroupDisplay() {
     }
     
     // 更新投票统计
-    updateVoteStats(currentGroup.vote_stats);
+    updateVoteStats();
     
     // 更新照片轮播
     updatePhotoCarousel();
@@ -325,6 +324,10 @@ async function loadGroupMembers() {
         renderMembersList(members);
     } catch (error) {
         console.error('加载成员失败:', error);
+        const membersList = document.getElementById('membersList');
+        if (membersList) {
+            membersList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">加载成员失败</p>';
+        }
     }
 }
 
@@ -406,32 +409,6 @@ function showPhotoSlide(index) {
     
     dots.forEach((dot, i) => {
         dot.classList.toggle('active', i === index);
-    });
-}
-
-// 生成二维码
-function generateQRCode() {
-    const qrContainer = document.getElementById('qrcode');
-    if (!qrContainer || !currentGroup) return;
-    
-    qrContainer.innerHTML = '';
-    
-    // 生成指向独立手机评价页面的URL
-    const qrUrl = `${window.location.origin}/mobile?group=${currentGroup.id}`;
-    
-    QRCode.toCanvas(qrContainer, qrUrl, {
-        width: 200,
-        height: 200,
-        margin: 2,
-        color: {
-            dark: '#0A2E5D',
-            light: '#FFFFFF'
-        }
-    }, function(error) {
-        if (error) {
-            console.error('生成二维码失败:', error);
-            qrContainer.innerHTML = '<p style="color: #B0C4DE;">二维码生成失败</p>';
-        }
     });
 }
 
@@ -922,6 +899,140 @@ async function initializeData() {
     }
 }
 
+// 投票数据管理函数
+async function loadVotesData() {
+    try {
+        const groupFilter = document.getElementById('voteGroupFilter');
+        const groupId = groupFilter ? groupFilter.value : '';
+        
+        const url = groupId ? `/votes?group_id=${groupId}` : '/votes';
+        const votes = await apiCall(url);
+        
+        renderVotesData(votes);
+    } catch (error) {
+        console.error('加载投票数据失败:', error);
+        showMessage('加载投票数据失败', 'error');
+    }
+}
+
+function renderVotesData(votes) {
+    const votesList = document.getElementById('votesList');
+    if (!votesList) return;
+    
+    votesList.innerHTML = '';
+    
+    if (votes.length === 0) {
+        votesList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无投票数据</p>';
+        return;
+    }
+    
+    votes.forEach(vote => {
+        const item = document.createElement('div');
+        item.className = 'admin-item';
+        
+        const voteTypeText = vote.vote_type === 1 ? '赞' : '踩';
+        const voteTypeClass = vote.vote_type === 1 ? 'vote-like' : 'vote-dislike';
+        
+        item.innerHTML = `
+            <div class="admin-item-info">
+                <div class="admin-item-title">
+                    ${vote.voter_name || '未知评价人'} 
+                    <span class="vote-type ${voteTypeClass}">${voteTypeText}</span>
+                </div>
+                <div class="admin-item-details">
+                    权重: ${vote.vote_weight} | 时间: ${new Date(vote.created_at).toLocaleString()}
+                </div>
+            </div>
+            <div class="admin-item-actions">
+                <button class="btn btn-secondary" onclick="editVote(${vote.id})">编辑</button>
+                <button class="btn btn-danger" onclick="deleteVote(${vote.id})">删除</button>
+            </div>
+        `;
+        votesList.appendChild(item);
+    });
+}
+
+async function editVote(voteId) {
+    try {
+        const votes = await apiCall('/votes');
+        const vote = votes.find(v => v.id === voteId);
+        
+        if (!vote) {
+            showMessage('投票数据不存在', 'error');
+            return;
+        }
+        
+        const content = `
+            <h3>编辑投票数据</h3>
+            <form id="editVoteForm">
+                <div class="form-group">
+                    <label for="editVoteType">投票类型:</label>
+                    <select id="editVoteType" name="vote_type" required>
+                        <option value="1" ${vote.vote_type === 1 ? 'selected' : ''}>赞</option>
+                        <option value="-1" ${vote.vote_type === -1 ? 'selected' : ''}>踩</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editVoteWeight">投票权重:</label>
+                    <input type="number" id="editVoteWeight" name="vote_weight" min="1" value="${vote.vote_weight}" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">保存</button>
+                    <button type="button" onclick="closeModal()">取消</button>
+                </div>
+            </form>
+        `;
+        showModal(content);
+        
+        document.getElementById('editVoteForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData);
+            data.vote_type = parseInt(data.vote_type);
+            data.vote_weight = parseInt(data.vote_weight);
+            
+            try {
+                await apiCall(`/votes/${voteId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+                
+                showMessage('投票数据更新成功', 'success');
+                closeModal();
+                loadVotesData();
+                
+                // 刷新主页面数据
+                if (currentGroup) {
+                    updateVoteStats();
+                }
+            } catch (error) {
+                showMessage('更新失败: ' + error.message, 'error');
+            }
+        });
+        
+    } catch (error) {
+        showMessage('加载投票数据失败: ' + error.message, 'error');
+    }
+}
+
+async function deleteVote(voteId) {
+    if (!confirm('确定要删除这条投票数据吗？')) return;
+    
+    try {
+        await apiCall(`/votes/${voteId}`, { method: 'DELETE' });
+        showMessage('投票数据已删除', 'success');
+        loadVotesData();
+        
+        // 刷新主页面数据
+        if (currentGroup) {
+            updateVoteStats();
+        }
+    } catch (error) {
+        showMessage('删除失败: ' + error.message, 'error');
+    }
+}
+
 // 显示添加小组模态框
 function showAddGroupModal() {
     const content = `
@@ -1208,6 +1319,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const initDataBtn = document.getElementById('initDataBtn');
     if (initDataBtn) {
         initDataBtn.addEventListener('click', initializeData);
+    }
+    
+    // 投票数据管理事件
+    const refreshVotesBtn = document.getElementById('refreshVotesBtn');
+    if (refreshVotesBtn) {
+        refreshVotesBtn.addEventListener('click', loadVotesData);
+    }
+    
+    const voteGroupFilter = document.getElementById('voteGroupFilter');
+    if (voteGroupFilter) {
+        voteGroupFilter.addEventListener('change', loadVotesData);
     }
 });
 

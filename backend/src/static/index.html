@@ -6,7 +6,6 @@
     <title>小组评价系统</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="qrcode.min.js"></script>
 </head>
 <body>
     <div id="app">
@@ -57,10 +56,8 @@
                         </div>
                     </div>
 
-                    <div class="qr-section">
-                        <div id="qrcode" class="qr-code" onclick="openMobilePage()"></div>
-                        <p class="qr-text">扫码进行评价</p>
-                        <button id="openMobileBtn" class="btn btn-secondary" onclick="openMobilePage()">点击进入评价页面</button>
+                    <div class="action-section">
+                        <button id="openMobileBtn" class="btn btn-primary">进入评价页面</button>
                     </div>
                 </div>
 
@@ -84,6 +81,7 @@
                     <button class="admin-tab active" data-tab="groups">小组管理</button>
                     <button class="admin-tab" data-tab="voters">评价人管理</button>
                     <button class="admin-tab" data-tab="roles">职务管理</button>
+                    <button class="admin-tab" data-tab="votes">投票数据</button>
                     <button class="admin-tab" data-tab="init">初始化数据</button>
                 </div>
 
@@ -116,6 +114,20 @@
                         <button id="addRoleBtn" class="btn btn-primary">添加职务</button>
                     </div>
                     <div id="rolesList" class="admin-list"></div>
+                </div>
+
+                <!-- 投票数据管理 -->
+                <div id="votesTab" class="admin-content">
+                    <div class="admin-header">
+                        <h3>投票数据管理</h3>
+                        <div class="admin-actions">
+                            <select id="voteGroupFilter" class="form-control">
+                                <option value="">选择小组</option>
+                            </select>
+                            <button id="refreshVotesBtn" class="btn btn-secondary">刷新数据</button>
+                        </div>
+                    </div>
+                    <div id="votesList" class="admin-list"></div>
                 </div>
 
                 <!-- 初始化数据 -->

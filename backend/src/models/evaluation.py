@@ -18,6 +18,7 @@ class Group(db.Model):
     # 关联关系
     members = db.relationship('Member', backref='group', lazy=True, cascade='all, delete-orphan')
     votes = db.relationship('Vote', backref='group', lazy=True, cascade='all, delete-orphan')
+    group_photos = db.relationship('GroupPhoto', backref='group', lazy=True, cascade='all, delete-orphan')
     
     def get_photos(self):
         """获取照片列表"""
@@ -135,6 +136,27 @@ class Vote(db.Model):
             'voter_name': self.voter.name if self.voter else None,
             'vote_type': self.vote_type,
             'vote_weight': self.vote_weight,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class GroupPhoto(db.Model):
+    """小组风采照片表"""
+    __tablename__ = 'group_photos'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'group_id': self.group_id,
+            'filename': self.filename,
+            'original_name': self.original_name,
+            'url': f'/uploads/{self.filename}',
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
