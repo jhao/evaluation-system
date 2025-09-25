@@ -67,6 +67,79 @@ body {
     color: #FFD700;
 }
 
+/* 管理员登录模态框 */
+.admin-login-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+    backdrop-filter: blur(4px);
+    padding: 1.5rem;
+}
+
+.admin-login-modal.active {
+    display: flex;
+}
+
+.admin-login-dialog {
+    width: 100%;
+    max-width: 420px;
+    background: linear-gradient(135deg, rgba(10, 46, 93, 0.95), rgba(0, 31, 63, 0.95));
+    border: 1px solid rgba(255, 215, 0, 0.6);
+    border-radius: 18px;
+    padding: 2rem;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.admin-login-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: transparent;
+    border: none;
+    color: #B0C4DE;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.admin-login-close:hover {
+    color: #FFD700;
+}
+
+.admin-login-description {
+    color: #B0C4DE;
+    margin-bottom: 1.2rem;
+    font-size: 0.95rem;
+}
+
+.admin-login-form .form-group label {
+    color: #FFD700;
+}
+
+.admin-login-form input[type="password"] {
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.admin-login-error {
+    min-height: 1.2rem;
+    color: #FF6B6B;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.admin-login-form .form-actions {
+    justify-content: flex-end;
+}
+
+.admin-login-form .form-actions button {
+    min-width: 100px;
+}
+
 /* 表单样式 */
 .form-group {
     margin-bottom: 1.5rem;
@@ -771,7 +844,7 @@ body {
 .ranking-display {
     display: flex;
     justify-content: center;
-    align-items: end;
+    align-items: flex-end;
     gap: 2rem;
     min-height: 400px;
     flex-wrap: wrap;
@@ -780,13 +853,16 @@ body {
 .ranking-item {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    padding: 2rem 1.5rem;
+    padding: 2rem 1.5rem 2.5rem;
     backdrop-filter: blur(10px);
     border: 2px solid rgba(255, 255, 255, 0.2);
     text-align: center;
     transition: all 0.3s ease;
     position: relative;
-    min-width: 180px;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .ranking-item:hover {
@@ -841,22 +917,45 @@ body {
     font-size: 2rem;
 }
 
+.ranking-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+}
+
 .ranking-name {
     font-size: 1.3rem;
     font-weight: bold;
-    margin-bottom: 1rem;
     word-break: break-all;
 }
 
 .ranking-score {
     font-size: 1.5rem;
     font-weight: bold;
-    margin-bottom: 0.5rem;
 }
 
 .ranking-position {
-    font-size: 1rem;
-    opacity: 0.8;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: auto;
+    font-size: 1.2rem;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.ranking-position-number {
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.ranking-position-prefix,
+.ranking-position-suffix {
+    font-size: 1.1rem;
+    font-weight: 600;
 }
 
 /* 手机端样式 */
@@ -1409,25 +1508,51 @@ body.fullscreen-mode .navbar {
 
 body.fullscreen-mode .page {
     min-height: 100vh;
-    padding-top: 2rem;
+    padding: 2rem 2rem 3rem;
 }
 
-body.fullscreen-mode #displayPage {
-    padding-bottom: 2rem;
+body.fullscreen-mode[data-fullscreen-page="displayPage"] #displayPage {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem 0 3rem;
 }
 
-body.fullscreen-mode .group-tabs {
+body.fullscreen-mode[data-fullscreen-page="displayPage"] .display-stage {
+    max-width: none;
+}
+
+body.fullscreen-mode[data-fullscreen-page="displayPage"] .display-stage.scaled {
+    will-change: transform;
+}
+
+body.fullscreen-mode[data-fullscreen-page="displayPage"] .group-tabs {
     margin-bottom: 1.2rem;
 }
 
-body.fullscreen-mode .main-content {
-    max-width: 100%;
+body.fullscreen-mode[data-fullscreen-page="displayPage"] .display-stage .main-content {
+    max-width: none;
     width: 100%;
-    height: calc(100vh - 200px);
+    height: auto;
 }
 
-body.fullscreen-mode #displayPage .members-list {
+body.fullscreen-mode[data-fullscreen-page="displayPage"] #displayPage .members-list {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+body.fullscreen-mode[data-fullscreen-page="rankingPage"] #rankingPage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+body.fullscreen-mode[data-fullscreen-page="rankingPage"] .ranking-title {
+    font-size: 3rem;
+}
+
+body.fullscreen-mode[data-fullscreen-page="rankingPage"] .ranking-display {
+    gap: 2.5rem;
 }
 
 .fullscreen-exit-btn {

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from src.models.evaluation import db, Group, Role, Member, Voter, Vote, GroupPhoto
 import os
@@ -8,8 +8,74 @@ import pandas as pd
 import openpyxl
 from io import BytesIO
 from datetime import datetime
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from functools import wraps
 
 evaluation_bp = Blueprint('evaluation', __name__)
+
+TOKEN_SALT = 'evaluation-admin-token'
+TOKEN_MAX_AGE = 12 * 60 * 60
+
+
+def get_token_serializer():
+    secret_key = current_app.config.get('SECRET_KEY', 'evaluation_system_secret_key_2024')
+    return URLSafeTimedSerializer(secret_key, salt=TOKEN_SALT)
+
+
+def generate_admin_token(username):
+    serializer = get_token_serializer()
+    return serializer.dumps({'username': username})
+
+
+def verify_admin_token(token):
+    serializer = get_token_serializer()
+    try:
+        data = serializer.loads(token, max_age=TOKEN_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+
+    if data.get('username') != current_app.config.get('ADMIN_USERNAME', 'super'):
+        return None
+
+    return data
+
+
+def admin_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '') or ''
+        token = ''
+
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:].strip()
+        elif auth_header:
+            token = auth_header.strip()
+
+        if not token:
+            token = (request.args.get('token') or '').strip()
+
+        if not token or not verify_admin_token(token):
+            return jsonify({'error': '未授权访问'}), 401
+
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@evaluation_bp.route('/admin/login', methods=['POST'])
+def admin_login():
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    admin_username = current_app.config.get('ADMIN_USERNAME', 'super')
+    admin_password = current_app.config.get('ADMIN_PASSWORD', 'tiandatiankai2025')
+
+    if username != admin_username or password != admin_password:
+        return jsonify({'error': '账号或密码错误'}), 401
+
+    token = generate_admin_token(username)
+    return jsonify({'token': token, 'username': username})
 
 # 文件上传配置
 UPLOAD_FOLDER = 'src/static/uploads'
@@ -34,6 +100,7 @@ def get_groups():
     return jsonify([group.to_dict() for group in groups])
 
 @evaluation_bp.route('/groups', methods=['POST'])
+@admin_required
 def create_group():
     """创建小组"""
     data = request.get_json()
@@ -50,6 +117,7 @@ def create_group():
     return jsonify(group.to_dict()), 201
 
 @evaluation_bp.route('/groups/<int:group_id>', methods=['PUT'])
+@admin_required
 def update_group(group_id):
     """更新小组"""
     group = Group.query.get_or_404(group_id)
@@ -65,6 +133,7 @@ def update_group(group_id):
     return jsonify(group.to_dict())
 
 @evaluation_bp.route('/groups/<int:group_id>', methods=['DELETE'])
+@admin_required
 def delete_group(group_id):
     """删除小组"""
     group = Group.query.get_or_404(group_id)
@@ -73,6 +142,7 @@ def delete_group(group_id):
     return '', 204
 
 @evaluation_bp.route('/groups/<int:group_id>/lock', methods=['POST'])
+@admin_required
 def lock_group(group_id):
     """锁定/解锁小组评价"""
     group = Group.query.get_or_404(group_id)
@@ -90,6 +160,7 @@ def get_roles():
     return jsonify([role.to_dict() for role in roles])
 
 @evaluation_bp.route('/roles', methods=['POST'])
+@admin_required
 def create_role():
     """创建职务"""
     data = request.get_json()
@@ -99,6 +170,7 @@ def create_role():
     return jsonify(role.to_dict()), 201
 
 @evaluation_bp.route('/roles/<int:role_id>', methods=['DELETE'])
+@admin_required
 def delete_role(role_id):
     """删除职务"""
     role = Role.query.get_or_404(role_id)
@@ -116,6 +188,7 @@ def get_group_members(group_id):
     return jsonify([member.to_dict() for member in members])
 
 @evaluation_bp.route('/groups/<int:group_id>/members', methods=['POST'])
+@admin_required
 def add_group_member(group_id):
     """添加小组成员"""
     group = Group.query.get_or_404(group_id)
@@ -185,6 +258,7 @@ def _parse_bulk_members_payload(payload):
 
 
 @evaluation_bp.route('/groups/<int:group_id>/members/bulk', methods=['POST'])
+@admin_required
 def bulk_add_group_members(group_id):
     """批量添加小组成员"""
     Group.query.get_or_404(group_id)
@@ -212,6 +286,7 @@ def bulk_add_group_members(group_id):
 
 
 @evaluation_bp.route('/groups/<int:group_id>/members/bulk', methods=['PUT'])
+@admin_required
 def bulk_replace_group_members(group_id):
     """批量覆盖小组成员"""
     Group.query.get_or_404(group_id)
@@ -240,6 +315,7 @@ def bulk_replace_group_members(group_id):
         return jsonify({'error': f'批量保存失败: {str(e)}'}), 500
 
 @evaluation_bp.route('/groups/<int:group_id>/members/<int:member_id>', methods=['PUT'])
+@admin_required
 def update_group_member(group_id, member_id):
     """更新小组成员"""
     member = Member.query.filter_by(id=member_id, group_id=group_id).first_or_404()
@@ -268,6 +344,7 @@ def update_group_member(group_id, member_id):
     return jsonify(member.to_dict())
 
 @evaluation_bp.route('/groups/<int:group_id>/members/<int:member_id>', methods=['DELETE'])
+@admin_required
 def delete_group_member(group_id, member_id):
     """删除小组成员"""
     member = Member.query.filter_by(id=member_id, group_id=group_id).first_or_404()
@@ -278,12 +355,14 @@ def delete_group_member(group_id, member_id):
 # ==================== 评价人管理API ====================
 
 @evaluation_bp.route('/voters', methods=['GET'])
+@admin_required
 def get_voters():
     """获取所有评价人"""
     voters = Voter.query.all()
     return jsonify([voter.to_dict() for voter in voters])
 
 @evaluation_bp.route('/voters', methods=['POST'])
+@admin_required
 def create_voter():
     """创建评价人"""
     data = request.get_json()
@@ -297,6 +376,7 @@ def create_voter():
     return jsonify(voter.to_dict()), 201
 
 @evaluation_bp.route('/voters/<int:voter_id>', methods=['PUT'])
+@admin_required
 def update_voter(voter_id):
     """更新评价人"""
     voter = Voter.query.get_or_404(voter_id)
@@ -310,6 +390,7 @@ def update_voter(voter_id):
     return jsonify(voter.to_dict())
 
 @evaluation_bp.route('/voters/<int:voter_id>', methods=['DELETE'])
+@admin_required
 def delete_voter(voter_id):
     """删除评价人"""
     voter = Voter.query.get_or_404(voter_id)
@@ -318,6 +399,7 @@ def delete_voter(voter_id):
     return '', 204
 
 @evaluation_bp.route('/voters/import', methods=['POST'])
+@admin_required
 def import_voters():
     """批量导入评价人"""
     if 'file' not in request.files:
@@ -391,6 +473,7 @@ def import_voters():
         return jsonify({'error': f'文件处理失败: {str(e)}'}), 500
 
 @evaluation_bp.route('/voters/template', methods=['GET'])
+@admin_required
 def download_voters_template():
     """下载评价人导入模板"""
     try:
@@ -515,6 +598,7 @@ def get_group_stats(group_id):
 # ==================== 投票数据管理API ====================
 
 @evaluation_bp.route('/votes', methods=['GET'])
+@admin_required
 def get_votes():
     """获取投票数据"""
     group_id = request.args.get('group_id')
@@ -527,6 +611,7 @@ def get_votes():
     return jsonify([vote.to_dict() for vote in votes])
 
 @evaluation_bp.route('/votes/<int:vote_id>', methods=['PUT'])
+@admin_required
 def update_vote(vote_id):
     """更新投票数据"""
     vote = Vote.query.get_or_404(vote_id)
@@ -542,6 +627,7 @@ def update_vote(vote_id):
     return jsonify(vote.to_dict())
 
 @evaluation_bp.route('/votes/<int:vote_id>', methods=['DELETE'])
+@admin_required
 def delete_vote(vote_id):
     """删除投票数据"""
     vote = Vote.query.get_or_404(vote_id)
@@ -550,6 +636,7 @@ def delete_vote(vote_id):
     return '', 204
 
 @evaluation_bp.route('/votes/batch-update', methods=['POST'])
+@admin_required
 def batch_update_votes():
     """批量更新投票数据"""
     data = request.get_json()
@@ -603,6 +690,7 @@ def get_ranking():
 # ==================== 小组照片管理API ====================
 
 @evaluation_bp.route('/groups/<int:group_id>/photos', methods=['POST'])
+@admin_required
 def upload_group_photos(group_id):
     """上传小组风采照片"""
     try:
@@ -658,6 +746,7 @@ def upload_group_photos(group_id):
         return jsonify({'error': str(e)}), 500
 
 @evaluation_bp.route('/groups/<int:group_id>/photos', methods=['GET'])
+@admin_required
 def get_group_photos(group_id):
     """获取小组风采照片"""
     try:
@@ -667,6 +756,7 @@ def get_group_photos(group_id):
         return jsonify({'error': str(e)}), 500
 
 @evaluation_bp.route('/groups/<int:group_id>/photos/<int:photo_id>', methods=['DELETE'])
+@admin_required
 def delete_group_photo(group_id, photo_id):
     """删除小组风采照片"""
     try:
@@ -691,6 +781,7 @@ def delete_group_photo(group_id, photo_id):
 # ==================== 文件上传API ====================
 
 @evaluation_bp.route('/upload', methods=['POST'])
+@admin_required
 def upload_file():
     """文件上传"""
     if 'file' not in request.files:
@@ -716,6 +807,7 @@ def upload_file():
 # ==================== 初始化数据API ====================
 
 @evaluation_bp.route('/init-data', methods=['POST'])
+@admin_required
 def init_data():
     """初始化示例数据"""
     # 创建默认职务
