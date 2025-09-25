@@ -7,6 +7,14 @@ let voters = [];
 let currentVoter = null;
 let photoCarouselInterval;
 let manualFullscreen = false;
+let fullscreenTargetPageId = null;
+
+const ADMIN_TOKEN_STORAGE_KEY = 'evaluationAdminToken';
+let adminToken = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
+let adminAuthPromptVisible = false;
+
+const DISPLAY_STAGE_BASE_WIDTH = 1600;
+const DISPLAY_STAGE_BASE_HEIGHT = 900;
 
 // API基础URL
 const API_BASE = '/api';
@@ -35,15 +43,186 @@ function initializeApp() {
 function setupNavigation() {
     const navButtons = document.querySelectorAll('.nav-btn');
     navButtons.forEach(btn => {
+        if (btn.id === 'fullscreenToggle') {
+            return;
+        }
+
         btn.addEventListener('click', function() {
-            const targetPage = this.id.replace('Btn', 'Page');
+            const targetPage = this.dataset.targetPage || this.id.replace('Btn', 'Page');
+
+            if (targetPage === 'adminPage' && !ensureAdminAuthenticated()) {
+                return;
+            }
+
             showPage(targetPage);
-            
-            // 更新按钮状态
-            navButtons.forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
+            setActiveNavButton(this.id);
         });
     });
+}
+
+function setActiveNavButton(buttonId) {
+    const navButtons = document.querySelectorAll('.nav-btn');
+    navButtons.forEach(btn => {
+        if (btn.id === 'fullscreenToggle') {
+            btn.classList.remove('active');
+            return;
+        }
+        btn.classList.toggle('active', btn.id === buttonId);
+    });
+}
+
+function getAdminToken() {
+    return adminToken || '';
+}
+
+function setAdminToken(token) {
+    adminToken = token || '';
+    if (adminToken) {
+        localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken);
+    } else {
+        localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    }
+}
+
+function clearAdminToken() {
+    setAdminToken('');
+}
+
+function ensureAdminAuthenticated() {
+    if (getAdminToken()) {
+        return true;
+    }
+    showAdminLoginModal();
+    return false;
+}
+
+function showAdminLoginModal() {
+    const modal = document.getElementById('adminLoginModal');
+    const passwordInput = document.getElementById('adminPassword');
+    const errorEl = document.getElementById('adminLoginError');
+
+    if (errorEl) {
+        errorEl.textContent = '';
+    }
+
+    if (passwordInput) {
+        passwordInput.value = '';
+        passwordInput.focus();
+    }
+
+    if (modal) {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    adminAuthPromptVisible = true;
+}
+
+function hideAdminLoginModal() {
+    const modal = document.getElementById('adminLoginModal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    adminAuthPromptVisible = false;
+}
+
+async function handleAdminLoginSubmit(event) {
+    event.preventDefault();
+
+    const usernameInput = document.getElementById('adminUsername');
+    const passwordInput = document.getElementById('adminPassword');
+    const errorEl = document.getElementById('adminLoginError');
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+
+    const username = usernameInput ? usernameInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+
+    if (!password) {
+        if (errorEl) {
+            errorEl.textContent = '请输入管理员密码';
+        }
+        if (passwordInput) {
+            passwordInput.focus();
+        }
+        return;
+    }
+
+    if (errorEl) {
+        errorEl.textContent = '';
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+    }
+
+    try {
+        await loginAdmin(username, password);
+        hideAdminLoginModal();
+        showMessage('登录成功', 'success');
+        setActiveNavButton('adminBtn');
+        showPage('adminPage');
+    } catch (error) {
+        if (errorEl) {
+            errorEl.textContent = error.message || '登录失败，请重试';
+        }
+        if (passwordInput) {
+            passwordInput.focus();
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+async function loginAdmin(username, password) {
+    const response = await fetch(API_BASE + '/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+
+    const resultText = await response.text();
+    let result = {};
+    if (resultText) {
+        try {
+            result = JSON.parse(resultText);
+        } catch (error) {
+            console.warn('解析登录响应失败:', error);
+        }
+    }
+
+    if (!response.ok || !result.token) {
+        const message = result.error || '账号或密码错误';
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+    }
+
+    setAdminToken(result.token);
+    adminAuthPromptVisible = false;
+    return result;
+}
+
+function handleAdminUnauthorized() {
+    const hadToken = Boolean(getAdminToken());
+    clearAdminToken();
+
+    const adminPage = document.getElementById('adminPage');
+    const isAdminActive = adminPage && adminPage.classList.contains('active');
+
+    if (!isAdminActive) {
+        adminAuthPromptVisible = false;
+        return;
+    }
+
+    if (!adminAuthPromptVisible && hadToken) {
+        showMessage('登录已过期，请重新登录', 'error');
+        showAdminLoginModal();
+    }
+
+    setActiveNavButton('adminBtn');
 }
 
 // 显示页面
@@ -94,17 +273,19 @@ function setupEventListeners() {
     // 模态框关闭
     const modal = document.getElementById('modal');
     const closeBtn = document.querySelector('.close');
-    
-    closeBtn.addEventListener('click', function() {
-        modal.classList.remove('active');
-    });
-    
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            modal.classList.remove('active');
+        });
+    }
+
     window.addEventListener('click', function(event) {
         if (event.target === modal) {
             modal.classList.remove('active');
         }
     });
-    
+
     // 后台管理标签切换
     const adminTabs = document.querySelectorAll('.admin-tab');
     adminTabs.forEach(tab => {
@@ -158,26 +339,55 @@ function setupEventListeners() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('keydown', handleFullscreenKeydown);
 
+    window.addEventListener('resize', handleWindowResize);
+
+    const adminLoginForm = document.getElementById('adminLoginForm');
+    if (adminLoginForm) {
+        adminLoginForm.addEventListener('submit', handleAdminLoginSubmit);
+    }
+
+    const adminLoginModal = document.getElementById('adminLoginModal');
+    if (adminLoginModal) {
+        adminLoginModal.addEventListener('click', (event) => {
+            if (event.target === adminLoginModal) {
+                hideAdminLoginModal();
+            }
+        });
+    }
+
+    const adminLoginCloseBtn = document.getElementById('adminLoginCloseBtn');
+    if (adminLoginCloseBtn) {
+        adminLoginCloseBtn.addEventListener('click', hideAdminLoginModal);
+    }
+
+    const adminLoginCancelBtn = document.getElementById('adminLoginCancelBtn');
+    if (adminLoginCancelBtn) {
+        adminLoginCancelBtn.addEventListener('click', hideAdminLoginModal);
+    }
+
     // 后台管理按钮事件绑定
     setupAdminButtonEvents();
 }
 
-function ensureDisplayPageActive() {
-    const displayPage = document.getElementById('displayPage');
-    if (!displayPage) return;
+function prepareFullscreenTargetPage() {
+    const activePage = document.querySelector('.page.active');
 
-    if (!displayPage.classList.contains('active')) {
-        showPage('displayPage');
-
-        const navButtons = document.querySelectorAll('.nav-btn');
-        navButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.id === 'displayBtn');
-        });
+    if (activePage && (activePage.id === 'displayPage' || activePage.id === 'rankingPage')) {
+        fullscreenTargetPageId = activePage.id;
+        return activePage;
     }
+
+    fullscreenTargetPageId = 'displayPage';
+    showPage('displayPage');
+    setActiveNavButton('displayBtn');
+    return document.getElementById('displayPage');
 }
 
 async function enterFullscreenMode() {
-    ensureDisplayPageActive();
+    const targetPage = prepareFullscreenTargetPage();
+    if (!targetPage) {
+        return;
+    }
 
     if (document.fullscreenElement || manualFullscreen) {
         activateFullscreenUI();
@@ -204,6 +414,7 @@ async function exitFullscreenMode() {
     if (manualFullscreen) {
         manualFullscreen = false;
         deactivateFullscreenUI();
+        fullscreenTargetPageId = null;
         return;
     }
 
@@ -213,9 +424,11 @@ async function exitFullscreenMode() {
         } catch (error) {
             console.warn('退出全屏失败:', error);
             deactivateFullscreenUI();
+            fullscreenTargetPageId = null;
         }
     } else {
         deactivateFullscreenUI();
+        fullscreenTargetPageId = null;
     }
 }
 
@@ -230,6 +443,7 @@ function handleFullscreenChange() {
 
     if (!isActive) {
         manualFullscreen = false;
+        fullscreenTargetPageId = null;
     }
 }
 
@@ -237,6 +451,53 @@ function handleFullscreenKeydown(event) {
     if (event.key === 'Escape' && manualFullscreen) {
         manualFullscreen = false;
         deactivateFullscreenUI();
+    }
+}
+
+function handleWindowResize() {
+    if (document.body.classList.contains('fullscreen-mode')) {
+        updateDisplayScale();
+    }
+}
+
+function activateFullscreenUI() {
+    document.body.classList.add('fullscreen-mode');
+    if (fullscreenTargetPageId) {
+        document.body.setAttribute('data-fullscreen-page', fullscreenTargetPageId);
+    } else {
+        document.body.removeAttribute('data-fullscreen-page');
+    }
+    updateDisplayScale();
+}
+
+function deactivateFullscreenUI() {
+    document.body.classList.remove('fullscreen-mode');
+    document.body.removeAttribute('data-fullscreen-page');
+    updateDisplayScale();
+}
+
+function updateDisplayScale() {
+    const stage = document.querySelector('#displayPage .display-stage');
+    if (!stage) {
+        return;
+    }
+
+    const inFullscreen = document.body.classList.contains('fullscreen-mode') && fullscreenTargetPageId === 'displayPage';
+
+    if (inFullscreen) {
+        const scaleX = window.innerWidth / DISPLAY_STAGE_BASE_WIDTH;
+        const scaleY = window.innerHeight / DISPLAY_STAGE_BASE_HEIGHT;
+        const scale = Math.min(scaleX, scaleY);
+
+        stage.style.transform = `scale(${scale})`;
+        stage.style.width = `${DISPLAY_STAGE_BASE_WIDTH}px`;
+        stage.style.height = `${DISPLAY_STAGE_BASE_HEIGHT}px`;
+        stage.classList.add('scaled');
+    } else {
+        stage.style.transform = '';
+        stage.style.width = '';
+        stage.style.height = '';
+        stage.classList.remove('scaled');
     }
 }
 
@@ -290,11 +551,18 @@ function setupAdminButtonEvents() {
 // 加载初始数据
 async function loadInitialData() {
     try {
-        await Promise.all([
+        const initialTasks = [
             loadGroups(),
-            loadRoles(),
-            loadVoters()
-        ]);
+            loadRoles()
+        ];
+
+        if (getAdminToken()) {
+            initialTasks.push(loadVoters({ silent: true }));
+        } else {
+            voters = [];
+        }
+
+        await Promise.all(initialTasks);
 
         if (groups.length > 0) {
             selectGroup(groups[0]);
@@ -333,37 +601,64 @@ async function loadDisplayData() {
     }
 }
 
+function authorizedFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const token = getAdminToken();
+
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    return fetch(url, { ...options, headers });
+}
+
 // API调用函数
 async function apiCall(url, options = {}) {
+    const isFormData = options.body instanceof FormData;
+    const headers = new Headers(options.headers || {});
+
+    if (!isFormData && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+
     try {
-        const response = await fetch(API_BASE + url, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
+        const response = await authorizedFetch(API_BASE + url, {
+            ...options,
+            headers
         });
-        
+
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}`);
+            let errorData = {};
+            try {
+                errorData = await response.json();
+            } catch (parseError) {
+                errorData = {};
+            }
+
+            if (response.status === 401) {
+                handleAdminUnauthorized();
+            }
+
+            const error = new Error(errorData.error || `HTTP ${response.status}`);
+            error.status = response.status;
+            throw error;
         }
-        
-        // 处理204 No Content响应（删除操作通常返回此状态码）
+
         if (response.status === 204) {
             return null;
         }
-        
-        // 检查响应是否有内容
+
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             const text = await response.text();
             return text ? JSON.parse(text) : null;
         }
-        
+
         return await response.json();
     } catch (error) {
-        console.error('API调用失败:', error);
+        if (error.status !== 401) {
+            console.error('API调用失败:', error);
+        }
         throw error;
     }
 }
@@ -380,8 +675,27 @@ async function loadRoles() {
 }
 
 // 加载评价人数据
-async function loadVoters() {
-    voters = await apiCall('/voters');
+async function loadVoters(options = {}) {
+    try {
+        voters = await apiCall('/voters');
+        return voters;
+    } catch (error) {
+        if (error.status === 401) {
+            voters = [];
+            if (!options.silent) {
+                throw error;
+            }
+            return voters;
+        }
+
+        if (!options.silent) {
+            throw error;
+        }
+
+        console.error('加载评价人失败:', error);
+        voters = [];
+        return voters;
+    }
 }
 
 // 渲染小组标签
@@ -888,14 +1202,20 @@ function renderRanking(ranking) {
         if (item.rank === 1) crown = '<div class="ranking-crown">👑</div>';
         else if (item.rank === 2) crown = '<div class="ranking-crown">🥈</div>';
         else if (item.rank === 3) crown = '<div class="ranking-crown">🥉</div>';
-        
+
         rankingItem.innerHTML = `
             ${crown}
-            <div class="ranking-name">${item.name.substring(0, 6)}</div>
-            <div class="ranking-score">${item.total_score}分</div>
-            <div class="ranking-position">第${item.rank}名</div>
+            <div class="ranking-content">
+                <div class="ranking-name">${item.name.substring(0, 6)}</div>
+                <div class="ranking-score">${item.total_score}分</div>
+            </div>
+            <div class="ranking-position">
+                <span class="ranking-position-prefix">第</span>
+                <span class="ranking-position-number">${item.rank}</span>
+                <span class="ranking-position-suffix">名</span>
+            </div>
         `;
-        
+
         rankingDisplay.appendChild(rankingItem);
     });
 }
@@ -1009,7 +1329,7 @@ function initializeLogoUpload({
         uploadData.append('file', file);
 
         try {
-            const response = await fetch(`${API_BASE}/upload`, {
+            const response = await authorizedFetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 body: uploadData
             });
@@ -1384,7 +1704,7 @@ async function manageGroupPhotos(groupId) {
                 files.forEach(file => formData.append('photos', file));
 
                 try {
-                    const response = await fetch(`${API_BASE}/groups/${groupId}/photos`, {
+                    const response = await authorizedFetch(`${API_BASE}/groups/${groupId}/photos`, {
                         method: 'POST',
                         body: formData
                     });
@@ -1946,13 +2266,29 @@ async function handleAddRole(event) {
 }
 
 // 下载评价人导入模板
-function downloadVotersTemplate() {
-    const link = document.createElement('a');
-    link.href = API_BASE + '/voters/template';
-    link.download = '评价人导入模板.xlsx';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+async function downloadVotersTemplate() {
+    try {
+        const response = await authorizedFetch(API_BASE + '/voters/template');
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                handleAdminUnauthorized();
+            }
+            throw new Error('下载模板失败，请重新登录后重试');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '评价人导入模板.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        showMessage(error.message || '下载模板失败', 'error');
+    }
 }
 
 // 显示导入评价人模态框
@@ -2008,7 +2344,7 @@ async function handleFileImport(event) {
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch(API_BASE + '/voters/import', {
+        const response = await authorizedFetch(API_BASE + '/voters/import', {
             method: 'POST',
             body: formData
         });

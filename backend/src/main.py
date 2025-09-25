@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 # DON\'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -9,8 +10,20 @@ from flask_cors import CORS
 from src.models.evaluation import db
 from src.routes.evaluation import evaluation_bp
 
+DEFAULT_ADMIN_PASSWORD = 'tiandatiankai2025'
+
+
+def resolve_admin_password():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--pwd', dest='admin_password')
+    args, remaining = parser.parse_known_args()
+    sys.argv = [sys.argv[0], *remaining]
+    return args.admin_password or DEFAULT_ADMIN_PASSWORD
+
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'evaluation_system_secret_key_2024'
+app.config['ADMIN_USERNAME'] = 'super'
+app.config['ADMIN_PASSWORD'] = resolve_admin_password()
 
 # 启用CORS
 CORS(app, origins="*")

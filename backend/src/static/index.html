@@ -26,48 +26,50 @@
 
         <!-- 大屏展示页面 -->
         <div id="displayPage" class="page active">
-            <!-- 小组切换按钮 -->
-            <div class="group-tabs">
-                <div id="groupTabs" class="tabs-container"></div>
-            </div>
-
-            <!-- 主要内容区域 -->
-            <div class="main-content">
-                <!-- 左侧：小组成员 -->
-                <div class="left-panel">
-                    <h3>小组成员</h3>
-                    <div id="membersList" class="members-list"></div>
+            <div class="display-stage">
+                <!-- 小组切换按钮 -->
+                <div class="group-tabs">
+                    <div id="groupTabs" class="tabs-container"></div>
                 </div>
 
-                <!-- 中间：小组信息和投票统计 -->
-                <div class="center-panel">
-                    <div class="group-header">
-                        <img id="groupLogo" class="group-logo" src="" alt="小组Logo">
-                        <h2 id="groupName" class="group-name">请选择小组</h2>
+                <!-- 主要内容区域 -->
+                <div class="main-content">
+                    <!-- 左侧：小组成员 -->
+                    <div class="left-panel">
+                        <h3>小组成员</h3>
+                        <div id="membersList" class="members-list"></div>
                     </div>
-                    
-                    <div class="vote-stats">
-                        <div class="stat-item score">
-                            <div class="stat-icon">🏆</div>
-                            <div class="stat-number" id="totalScore">0</div>
-                            <div class="stat-label">投票计分</div>
+
+                    <!-- 中间：小组信息和投票统计 -->
+                    <div class="center-panel">
+                        <div class="group-header">
+                            <img id="groupLogo" class="group-logo" src="" alt="小组Logo">
+                            <h2 id="groupName" class="group-name">请选择小组</h2>
+                        </div>
+
+                        <div class="vote-stats">
+                            <div class="stat-item score">
+                                <div class="stat-icon">🏆</div>
+                                <div class="stat-number" id="totalScore">0</div>
+                                <div class="stat-label">投票计分</div>
+                            </div>
+                        </div>
+
+                        <div class="action-section">
+                            <button id="openMobileBtn" class="btn btn-primary">进入评价页面</button>
+                            <p class="share-text">复制链接访问评价页：<a id="evaluationShareLink" class="share-link" href="#" target="_blank" rel="noopener">请选择小组</a></p>
                         </div>
                     </div>
 
-                    <div class="action-section">
-                        <button id="openMobileBtn" class="btn btn-primary">进入评价页面</button>
-                        <p class="share-text">复制链接访问评价页：<a id="evaluationShareLink" class="share-link" href="#" target="_blank" rel="noopener">请选择小组</a></p>
-                    </div>
-                </div>
-
-                <!-- 右侧：照片轮播 -->
-                <div class="right-panel">
-                    <h3>小组风采</h3>
-                    <div id="photoCarousel" class="photo-carousel">
-                        <div class="carousel-container">
-                            <div id="photoSlides" class="photo-slides"></div>
+                    <!-- 右侧：照片轮播 -->
+                    <div class="right-panel">
+                        <h3>小组风采</h3>
+                        <div id="photoCarousel" class="photo-carousel">
+                            <div class="carousel-container">
+                                <div id="photoSlides" class="photo-slides"></div>
+                            </div>
+                            <div class="carousel-dots" id="carouselDots"></div>
                         </div>
-                        <div class="carousel-dots" id="carouselDots"></div>
                     </div>
                 </div>
             </div>
@@ -145,6 +147,30 @@
             <div class="ranking-container">
                 <h2 class="ranking-title">最终排名</h2>
                 <div id="rankingDisplay" class="ranking-display"></div>
+            </div>
+        </div>
+
+        <!-- 管理员登录 -->
+        <div id="adminLoginModal" class="admin-login-modal" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle" aria-hidden="true">
+            <div class="admin-login-dialog">
+                <button type="button" id="adminLoginCloseBtn" class="admin-login-close" aria-label="关闭">✕</button>
+                <h3 id="adminLoginTitle">管理员登录</h3>
+                <p class="admin-login-description">请输入超级管理员密码以进入后台管理。</p>
+                <form id="adminLoginForm" class="admin-login-form">
+                    <div class="form-group">
+                        <label for="adminUsername">账号</label>
+                        <input type="text" id="adminUsername" value="super" autocomplete="username" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPassword">密码</label>
+                        <input type="password" id="adminPassword" placeholder="请输入管理员密码" autocomplete="current-password" required>
+                    </div>
+                    <div id="adminLoginError" class="admin-login-error" role="alert"></div>
+                    <div class="form-actions">
+                        <button type="submit">登录</button>
+                        <button type="button" id="adminLoginCancelBtn">取消</button>
+                    </div>
+                </form>
             </div>
         </div>
 
