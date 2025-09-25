@@ -7,6 +7,7 @@ import uuid
 import pandas as pd
 import openpyxl
 from io import BytesIO
+from datetime import datetime
 
 evaluation_bp = Blueprint('evaluation', __name__)
 
@@ -140,8 +141,103 @@ def add_group_member(group_id):
     
     db.session.add(member)
     db.session.commit()
-    
+
     return jsonify(member.to_dict()), 201
+
+
+def _parse_bulk_members_payload(payload):
+    """解析批量成员数据"""
+    if not payload:
+        return []
+
+    lines = [line.strip() for line in payload.replace('\r', '').split('\n') if line.strip()]
+    members_data = []
+
+    for index, line in enumerate(lines, start=1):
+        normalized = line.replace('，', ',')
+        parts = [part.strip() for part in normalized.split(',')]
+
+        if len(parts) < 3:
+            raise ValueError(f'第{index}行数据格式不正确，请使用“姓名, 公司, 职务”的格式')
+
+        name = parts[0]
+        role_name = parts[-1]
+        company = ', '.join(parts[1:-1]).strip()
+
+        if not name:
+            raise ValueError(f'第{index}行姓名不能为空')
+        if not role_name:
+            raise ValueError(f'第{index}行职务不能为空')
+
+        role = Role.query.filter_by(name=role_name).first()
+        if not role:
+            role = Role(name=role_name)
+            db.session.add(role)
+            db.session.flush()
+
+        members_data.append({
+            'name': name,
+            'company': company,
+            'role_id': role.id
+        })
+
+    return members_data
+
+
+@evaluation_bp.route('/groups/<int:group_id>/members/bulk', methods=['POST'])
+def bulk_add_group_members(group_id):
+    """批量添加小组成员"""
+    Group.query.get_or_404(group_id)
+    data = request.get_json() or {}
+    entries = data.get('entries', '')
+
+    try:
+        members_data = _parse_bulk_members_payload(entries)
+        if not members_data:
+            return jsonify({'error': '没有有效的成员数据'}), 400
+
+        for member_data in members_data:
+            member = Member(group_id=group_id, **member_data)
+            db.session.add(member)
+
+        db.session.commit()
+        return jsonify({'message': f'成功导入 {len(members_data)} 名成员', 'count': len(members_data)})
+
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'批量导入失败: {str(e)}'}), 500
+
+
+@evaluation_bp.route('/groups/<int:group_id>/members/bulk', methods=['PUT'])
+def bulk_replace_group_members(group_id):
+    """批量覆盖小组成员"""
+    Group.query.get_or_404(group_id)
+    data = request.get_json() or {}
+    entries = data.get('entries', '')
+
+    try:
+        members_data = _parse_bulk_members_payload(entries)
+
+        # 清空现有成员
+        Member.query.filter_by(group_id=group_id).delete(synchronize_session=False)
+
+        # 添加新成员
+        for member_data in members_data:
+            member = Member(group_id=group_id, **member_data)
+            db.session.add(member)
+
+        db.session.commit()
+        return jsonify({'message': f'成功保存 {len(members_data)} 名成员', 'count': len(members_data)})
+
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'批量保存失败: {str(e)}'}), 500
 
 @evaluation_bp.route('/groups/<int:group_id>/members/<int:member_id>', methods=['PUT'])
 def update_group_member(group_id, member_id):

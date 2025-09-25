@@ -22,10 +22,14 @@ class Group(db.Model):
     
     def get_photos(self):
         """获取照片列表"""
+        # 优先使用独立的GroupPhoto表中的数据，兼容旧的JSON字段
+        if self.group_photos:
+            return [photo.to_dict().get('url') for photo in self.group_photos if photo.filename]
+
         if self.photos:
             try:
                 return json.loads(self.photos)
-            except:
+            except Exception:
                 return []
         return []
     
@@ -136,6 +140,7 @@ class Vote(db.Model):
             'group_id': self.group_id,
             'voter_id': self.voter_id,
             'voter_name': self.voter.name if self.voter else None,
+            'group_name': self.group.name if self.group else None,
             'vote_type': self.vote_type,
             'vote_weight': self.vote_weight,
             'created_at': self.created_at.isoformat() if self.created_at else None

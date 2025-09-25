@@ -92,6 +92,13 @@ body {
     transition: all 0.3s ease;
 }
 
+.form-helper {
+    color: #B0C4DE;
+    font-size: 0.85rem;
+    margin-top: -0.5rem;
+    margin-bottom: 1rem;
+}
+
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
@@ -281,39 +288,46 @@ body {
 }
 
 .members-list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 0.8rem;
 }
 
-.member-item {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 1rem;
+.member-card {
+    background: rgba(255, 255, 255, 0.12);
+    padding: 0.9rem;
     border-radius: 12px;
-    border-left: 4px solid #FFD700;
-    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    min-height: 90px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: transform 0.2s ease, background 0.2s ease;
 }
 
-.member-item:hover {
+.member-card:hover {
     background: rgba(255, 255, 255, 0.2);
-    transform: translateX(5px);
+    transform: translateY(-3px);
 }
 
-.member-name {
-    font-weight: bold;
-    font-size: 1.1rem;
-    margin-bottom: 0.3rem;
+.member-card-name {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.4rem;
 }
 
-.member-role {
+.member-card-meta {
     color: #B0C4DE;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    word-break: break-word;
 }
 
-.member-company {
+.member-card-placeholder {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.05);
     color: #87CEEB;
-    font-size: 0.8rem;
-    margin-top: 0.2rem;
 }
 
 /* 中间面板 */
@@ -602,6 +616,12 @@ body {
     box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
 }
 
+.btn-small {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    border-radius: 10px;
+}
+
 /* 管理列表 */
 .admin-list {
     display: grid;
@@ -642,7 +662,54 @@ body {
 
 .admin-item-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.photo-management {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.photo-grid-container {
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.photo-grid-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+}
+
+.photo-grid-item img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.photo-grid-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: #FFD700;
+    font-size: 0.85rem;
 }
 
 /* 排名页面 */

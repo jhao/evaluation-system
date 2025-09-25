@@ -195,13 +195,41 @@ async function loadInitialData() {
             loadRoles(),
             loadVoters()
         ]);
-        
+
         if (groups.length > 0) {
             selectGroup(groups[0]);
         }
     } catch (error) {
         console.error('加载初始数据失败:', error);
         showMessage('加载数据失败，请刷新页面重试', 'error');
+    }
+}
+
+async function loadDisplayData() {
+    const previousGroupId = currentGroup ? currentGroup.id : null;
+
+    try {
+        await loadGroups();
+
+        if (groups.length === 0) {
+            currentGroup = null;
+            const membersList = document.getElementById('membersList');
+            if (membersList) {
+                membersList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无小组数据</p>';
+            }
+            updateGroupDisplay();
+            return;
+        }
+
+        const matchedGroup = previousGroupId ? groups.find(group => group.id === previousGroupId) : null;
+        if (matchedGroup) {
+            selectGroup(matchedGroup);
+        } else {
+            selectGroup(groups[0]);
+        }
+    } catch (error) {
+        console.error('刷新大屏数据失败:', error);
+        showMessage('刷新大屏数据失败', 'error');
     }
 }
 
@@ -363,19 +391,42 @@ async function loadGroupMembers() {
 function renderMembersList(members) {
     const membersList = document.getElementById('membersList');
     if (!membersList) return;
-    
-    if (members.length === 0) {
-        membersList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无成员</p>';
-        return;
+
+    const safeMembers = Array.isArray(members) ? members : [];
+    let memberCards = [];
+
+    if (safeMembers.length === 0) {
+        memberCards.push(`
+            <div class="member-card member-card-placeholder">
+                <div class="member-card-name">暂无成员</div>
+                <div class="member-card-meta">等待添加</div>
+            </div>
+        `);
+    } else {
+        memberCards = safeMembers.map(member => {
+            const metaParts = [member.role_name || '未知职务'];
+            if (member.company) {
+                metaParts.push(member.company);
+            }
+
+            return `
+                <div class="member-card">
+                    <div class="member-card-name">${member.name}</div>
+                    <div class="member-card-meta">${metaParts.join(' ｜ ')}</div>
+                </div>
+            `;
+        });
     }
-    
-    membersList.innerHTML = members.map(member => `
-        <div class="member-item">
-            <div class="member-name">${member.name}</div>
-            <div class="member-role">${member.role_name || '未知职务'}</div>
-            ${member.company ? `<div class="member-company">${member.company}</div>` : ''}
+
+    const placeholdersNeeded = Math.max(0, 15 - memberCards.length);
+    const placeholders = Array.from({ length: placeholdersNeeded }).map(() => `
+        <div class="member-card member-card-placeholder">
+            <div class="member-card-name">待补充</div>
+            <div class="member-card-meta">欢迎加入</div>
         </div>
-    `).join('');
+    `);
+
+    membersList.innerHTML = [...memberCards, ...placeholders].join('');
 }
 
 // 更新照片轮播
@@ -546,19 +597,25 @@ async function submitVote(voteType) {
 }
 
 // 后台管理相关函数
-function loadAdminData() {
-    loadAdminGroups();
-    loadAdminVoters();
-    loadAdminRoles();
+async function loadAdminData() {
+    await Promise.all([
+        loadAdminGroups(),
+        loadAdminVoters(),
+        loadAdminRoles()
+    ]);
+    await loadVotesData();
 }
 
 function switchAdminTab(tabName) {
     const contents = document.querySelectorAll('.admin-content');
     contents.forEach(content => content.classList.remove('active'));
-    
+
     const targetContent = document.getElementById(tabName + 'Tab');
     if (targetContent) {
         targetContent.classList.add('active');
+        if (tabName === 'votes') {
+            loadVotesData();
+        }
     }
 }
 
@@ -567,6 +624,7 @@ async function loadAdminGroups() {
     try {
         const groups = await apiCall('/groups');
         renderAdminGroups(groups);
+        updateVoteGroupFilter(groups);
     } catch (error) {
         console.error('加载小组失败:', error);
     }
@@ -593,7 +651,8 @@ function renderAdminGroups(groups) {
             <div class="admin-item-actions">
                 <button class="btn btn-secondary" onclick="editGroup(${group.id})">编辑</button>
                 <button class="btn btn-info" onclick="manageGroupMembers(${group.id})">管理成员</button>
-                <button class="btn ${group.status === 0 ? 'btn-danger' : 'btn-primary'}" 
+                <button class="btn btn-secondary" onclick="manageGroupPhotos(${group.id})">风采管理</button>
+                <button class="btn ${group.status === 0 ? 'btn-danger' : 'btn-primary'}"
                         onclick="toggleGroupLock(${group.id}, ${group.status === 0})">
                     ${group.status === 0 ? '锁定' : '解锁'}
                 </button>
@@ -602,6 +661,19 @@ function renderAdminGroups(groups) {
         `;
         groupsList.appendChild(item);
     });
+}
+
+function updateVoteGroupFilter(groups) {
+    const filter = document.getElementById('voteGroupFilter');
+    if (!filter) return;
+
+    const previousValue = filter.value;
+    filter.innerHTML = '<option value="">全部小组</option>' +
+        groups.map(group => `<option value="${group.id}">${group.name}</option>`).join('');
+
+    if (previousValue && groups.some(group => String(group.id) === previousValue)) {
+        filter.value = previousValue;
+    }
 }
 
 // 加载后台评价人管理
@@ -818,38 +890,47 @@ function editGroup(groupId) {
 // 管理小组成员
 async function manageGroupMembers(groupId) {
     try {
-        const [members, roles] = await Promise.all([
+        const [members, roleList] = await Promise.all([
             apiCall(`/groups/${groupId}/members`),
             apiCall('/roles')
         ]);
-        
+
+        roles = roleList;
+
         const group = groups.find(g => g.id === groupId);
         const groupName = group ? group.name : '未知小组';
-        
+
         const content = `
             <h3>管理小组成员 - ${groupName}</h3>
             <div class="member-management">
                 <div class="admin-header">
-                    <button class="btn btn-primary" onclick="showAddMemberModal(${groupId})">添加成员</button>
+                    <div class="admin-actions">
+                        <button class="btn btn-primary" onclick="showAddMemberModal(${groupId})">添加成员</button>
+                        <button class="btn btn-info" onclick="showBulkAddMembersModal(${groupId})">批量添加</button>
+                        <button class="btn btn-secondary" onclick="showBulkEditMembersModal(${groupId})">批量编辑</button>
+                    </div>
                 </div>
-                <div id="membersList" class="admin-list">
-                    ${renderMembersManagement(members, roles)}
-                </div>
+                <div id="groupMembersManageList" class="admin-list"></div>
             </div>
         `;
         showModal(content);
-        
+        renderMembersManagementList(members);
+
     } catch (error) {
         showMessage('加载小组成员失败: ' + error.message, 'error');
     }
 }
 
-function renderMembersManagement(members, roles) {
+function renderMembersManagementList(members) {
+    const listEl = document.getElementById('groupMembersManageList');
+    if (!listEl) return;
+
     if (members.length === 0) {
-        return '<p style="text-align: center; color: #B0C4DE;">暂无成员</p>';
+        listEl.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无成员</p>';
+        return;
     }
-    
-    return members.map(member => `
+
+    listEl.innerHTML = members.map(member => `
         <div class="admin-item">
             <div class="admin-item-info">
                 <div class="admin-item-title">${member.name}</div>
@@ -865,11 +946,124 @@ function renderMembersManagement(members, roles) {
     `).join('');
 }
 
+function formatMemberLine(member) {
+    const company = member.company || '';
+    const roleName = member.role_name || '';
+    return `${member.name}, ${company}, ${roleName}`.trim();
+}
+
+function escapeHtml(text) {
+    if (text === undefined || text === null) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+async function ensureRolesLoaded() {
+    if (!roles || roles.length === 0) {
+        roles = await apiCall('/roles');
+    }
+}
+
+async function showBulkAddMembersModal(groupId) {
+    await ensureRolesLoaded();
+    const roleNames = roles.length > 0 ? roles.map(role => role.name).join('、') : '暂无职务，请先在职务管理中添加';
+
+    const content = `
+        <h3>批量添加小组成员</h3>
+        <form id="bulkAddMembersForm">
+            <div class="form-group">
+                <label for="bulkAddMembersInput">成员信息（每行：姓名, 公司, 职务）</label>
+                <textarea id="bulkAddMembersInput" rows="10" placeholder="张三, XX科技公司, 组员\n李四, XX集团, 组长"></textarea>
+            </div>
+            <p class="form-helper">支持中文逗号或英文逗号分隔，缺少公司时请保留空白。</p>
+            <p class="form-helper">当前职务列表：${roleNames}</p>
+            <div class="form-actions">
+                <button type="submit">批量添加</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+
+    const form = document.getElementById('bulkAddMembersForm');
+    if (form) {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const entries = document.getElementById('bulkAddMembersInput').value.trim();
+            await submitBulkMembers(groupId, entries, false);
+        });
+    }
+}
+
+async function showBulkEditMembersModal(groupId) {
+    try {
+        await ensureRolesLoaded();
+        const members = await apiCall(`/groups/${groupId}/members`);
+        const roleNames = roles.length > 0 ? roles.map(role => role.name).join('、') : '暂无职务，请先在职务管理中添加';
+        const defaultText = members.map(formatMemberLine).join('\n');
+        const escapedText = escapeHtml(defaultText);
+
+        const content = `
+            <h3>批量编辑小组成员</h3>
+            <form id="bulkEditMembersForm">
+                <div class="form-group">
+                    <label for="bulkEditMembersInput">成员信息（每行：姓名, 公司, 职务）</label>
+                    <textarea id="bulkEditMembersInput" rows="12" placeholder="张三, XX科技公司, 组员">${escapedText}</textarea>
+                </div>
+                <p class="form-helper">保存后将覆盖当前小组成员信息，请谨慎操作。</p>
+                <p class="form-helper">当前职务列表：${roleNames}</p>
+                <div class="form-actions">
+                    <button type="submit">保存</button>
+                    <button type="button" onclick="closeModal()">取消</button>
+                </div>
+            </form>
+        `;
+        showModal(content);
+
+        const form = document.getElementById('bulkEditMembersForm');
+        if (form) {
+            form.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                const entries = document.getElementById('bulkEditMembersInput').value.trim();
+                await submitBulkMembers(groupId, entries, true);
+            });
+        }
+    } catch (error) {
+        showMessage('加载成员信息失败: ' + error.message, 'error');
+    }
+}
+
+async function submitBulkMembers(groupId, entries, replace = false) {
+    if (!entries) {
+        showMessage('请输入成员信息', 'error');
+        return;
+    }
+
+    try {
+        const result = await apiCall(`/groups/${groupId}/members/bulk`, {
+            method: replace ? 'PUT' : 'POST',
+            body: JSON.stringify({ entries })
+        });
+
+        showMessage(result.message || '操作成功', 'success');
+        closeModal();
+        manageGroupMembers(groupId);
+        if (currentGroup && currentGroup.id === groupId) {
+            await loadDisplayData();
+        }
+        await loadRoles();
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
 // 显示添加成员模态框
 async function showAddMemberModal(groupId) {
     try {
         const roles = await apiCall('/roles');
-        
+
         const content = `
             <h3>添加小组成员</h3>
             <form id="addMemberForm">
@@ -917,9 +1111,117 @@ async function showAddMemberModal(groupId) {
                 showMessage('添加失败: ' + error.message, 'error');
             }
         });
-        
+
     } catch (error) {
         showMessage('加载职务列表失败: ' + error.message, 'error');
+    }
+}
+
+async function manageGroupPhotos(groupId) {
+    try {
+        const photos = await apiCall(`/groups/${groupId}/photos`);
+        const group = groups.find(g => g.id === groupId);
+        const groupName = group ? group.name : '未知小组';
+
+        const content = `
+            <h3>风采管理 - ${groupName}</h3>
+            <div class="photo-management">
+                <form id="uploadGroupPhotosForm">
+                    <div class="form-group">
+                        <label for="groupPhotosInput">上传小组风采照片</label>
+                        <input type="file" id="groupPhotosInput" name="photos" accept="image/*" multiple required>
+                    </div>
+                    <p class="form-helper">支持同时选择多张图片，建议上传清晰度较高的横图。</p>
+                    <div class="form-actions">
+                        <button type="submit">上传</button>
+                        <button type="button" onclick="closeModal()">关闭</button>
+                    </div>
+                </form>
+                <div id="groupPhotosList" class="photo-grid-container">
+                    ${renderGroupPhotosList(photos, groupId)}
+                </div>
+            </div>
+        `;
+
+        showModal(content);
+
+        const uploadForm = document.getElementById('uploadGroupPhotosForm');
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                const input = document.getElementById('groupPhotosInput');
+                const files = input ? Array.from(input.files || []) : [];
+
+                if (!files.length) {
+                    showMessage('请选择要上传的图片', 'error');
+                    return;
+                }
+
+                const formData = new FormData();
+                files.forEach(file => formData.append('photos', file));
+
+                try {
+                    const response = await fetch(`${API_BASE}/groups/${groupId}/photos`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || '上传失败');
+                    }
+
+                    showMessage(result.message || '上传成功', 'success');
+                    await refreshGroupData(groupId);
+                    manageGroupPhotos(groupId);
+                } catch (error) {
+                    showMessage(error.message, 'error');
+                }
+            });
+        }
+    } catch (error) {
+        showMessage('加载小组风采失败: ' + error.message, 'error');
+    }
+}
+
+function renderGroupPhotosList(photos, groupId) {
+    if (!photos || photos.length === 0) {
+        return '<p style="text-align: center; color: #B0C4DE;">暂无风采图片</p>';
+    }
+
+    const items = photos.map((photo, index) => `
+        <div class="photo-grid-item">
+            <img src="${photo.url}" alt="小组风采${index + 1}">
+            <div class="photo-grid-actions">
+                <span>照片${index + 1}</span>
+                <button class="btn btn-danger btn-small" onclick="deleteGroupPhoto(${groupId}, ${photo.id})">删除</button>
+            </div>
+        </div>
+    `);
+
+    return `<div class="photo-grid">${items.join('')}</div>`;
+}
+
+async function deleteGroupPhoto(groupId, photoId) {
+    if (!confirm('确定要删除这张照片吗？')) return;
+
+    try {
+        await apiCall(`/groups/${groupId}/photos/${photoId}`, { method: 'DELETE' });
+        showMessage('照片已删除', 'success');
+        await refreshGroupData(groupId);
+        manageGroupPhotos(groupId);
+    } catch (error) {
+        showMessage('删除失败: ' + error.message, 'error');
+    }
+}
+
+async function refreshGroupData(groupId) {
+    await loadGroups();
+    const matchedGroup = groups.find(group => group.id === groupId);
+    if (matchedGroup) {
+        selectGroup(matchedGroup);
+    } else if (groups.length > 0 && !currentGroup) {
+        selectGroup(groups[0]);
     }
 }
 
@@ -1156,18 +1458,19 @@ function renderVotesData(votes) {
     votes.forEach(vote => {
         const item = document.createElement('div');
         item.className = 'admin-item';
-        
+
         const voteTypeText = vote.vote_type === 1 ? '赞' : '踩';
         const voteTypeClass = vote.vote_type === 1 ? 'vote-like' : 'vote-dislike';
-        
+        const voteTime = vote.created_at ? new Date(vote.created_at).toLocaleString() : '未知时间';
+
         item.innerHTML = `
             <div class="admin-item-info">
                 <div class="admin-item-title">
-                    ${vote.voter_name || '未知评价人'} 
+                    ${vote.voter_name || '未知评价人'}
                     <span class="vote-type ${voteTypeClass}">${voteTypeText}</span>
                 </div>
                 <div class="admin-item-details">
-                    权重: ${vote.vote_weight} | 时间: ${new Date(vote.created_at).toLocaleString()}
+                    小组: ${vote.group_name || '未知小组'} | 权重: ${vote.vote_weight} | 时间: ${voteTime}
                 </div>
             </div>
             <div class="admin-item-actions">
