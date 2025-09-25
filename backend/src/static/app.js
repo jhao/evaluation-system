@@ -6,6 +6,7 @@ let roles = [];
 let voters = [];
 let currentVoter = null;
 let photoCarouselInterval;
+let manualFullscreen = false;
 
 // API基础URL
 const API_BASE = '/api';
@@ -143,9 +144,108 @@ function setupEventListeners() {
             currentVoter = null;
         });
     }
-    
+
+    const fullscreenToggle = document.getElementById('fullscreenToggle');
+    if (fullscreenToggle) {
+        fullscreenToggle.addEventListener('click', enterFullscreenMode);
+    }
+
+    const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+    if (exitFullscreenBtn) {
+        exitFullscreenBtn.addEventListener('click', exitFullscreenMode);
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('keydown', handleFullscreenKeydown);
+
     // 后台管理按钮事件绑定
     setupAdminButtonEvents();
+}
+
+function ensureDisplayPageActive() {
+    const displayPage = document.getElementById('displayPage');
+    if (!displayPage) return;
+
+    if (!displayPage.classList.contains('active')) {
+        showPage('displayPage');
+
+        const navButtons = document.querySelectorAll('.nav-btn');
+        navButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.id === 'displayBtn');
+        });
+    }
+}
+
+async function enterFullscreenMode() {
+    ensureDisplayPageActive();
+
+    if (document.fullscreenElement || manualFullscreen) {
+        activateFullscreenUI();
+        return;
+    }
+
+    const targetElement = document.documentElement;
+
+    if (targetElement && targetElement.requestFullscreen) {
+        try {
+            await targetElement.requestFullscreen();
+        } catch (error) {
+            console.warn('启动全屏失败:', error);
+            manualFullscreen = true;
+            activateFullscreenUI();
+        }
+    } else {
+        manualFullscreen = true;
+        activateFullscreenUI();
+    }
+}
+
+async function exitFullscreenMode() {
+    if (manualFullscreen) {
+        manualFullscreen = false;
+        deactivateFullscreenUI();
+        return;
+    }
+
+    if (document.fullscreenElement) {
+        try {
+            await document.exitFullscreen();
+        } catch (error) {
+            console.warn('退出全屏失败:', error);
+            deactivateFullscreenUI();
+        }
+    } else {
+        deactivateFullscreenUI();
+    }
+}
+
+function handleFullscreenChange() {
+    const isActive = Boolean(document.fullscreenElement);
+
+    if (isActive) {
+        activateFullscreenUI();
+    } else if (!manualFullscreen) {
+        deactivateFullscreenUI();
+    }
+
+    if (!isActive) {
+        manualFullscreen = false;
+    }
+}
+
+function handleFullscreenKeydown(event) {
+    if (event.key === 'Escape' && manualFullscreen) {
+        manualFullscreen = false;
+        deactivateFullscreenUI();
+    }
+}
+
+function activateFullscreenUI() {
+    document.body.classList.add('fullscreen-mode');
+}
+
+function deactivateFullscreenUI() {
+    document.body.classList.remove('fullscreen-mode');
 }
 
 // 设置后台管理按钮事件
@@ -322,11 +422,23 @@ function selectGroup(group) {
 
 // 更新小组显示
 function updateGroupDisplay() {
+    const shareLinkElement = document.getElementById('evaluationShareLink');
+    if (shareLinkElement) {
+        if (currentGroup) {
+            const mobileUrl = buildMobileEvaluationUrl(currentGroup.id);
+            shareLinkElement.textContent = mobileUrl;
+            shareLinkElement.href = mobileUrl;
+        } else {
+            shareLinkElement.textContent = '请选择小组';
+            shareLinkElement.href = '#';
+        }
+    }
+
     if (!currentGroup) return;
-    
+
     const groupName = document.getElementById('groupName');
     const groupLogo = document.getElementById('groupLogo');
-    
+
     if (groupName) groupName.textContent = currentGroup.name;
     if (groupLogo) {
         if (currentGroup.logo) {
@@ -336,10 +448,10 @@ function updateGroupDisplay() {
             groupLogo.style.display = 'none';
         }
     }
-    
+
     // 更新投票统计
     updateVoteStats(currentGroup ? currentGroup.vote_stats : null);
-    
+
     // 更新照片轮播
     updatePhotoCarousel();
 }
@@ -488,13 +600,17 @@ function showPhotoSlide(index) {
 }
 
 // 打开手机端评价页面
+function buildMobileEvaluationUrl(groupId) {
+    return `${window.location.origin}/mobile?group=${groupId}`;
+}
+
 function openMobilePage() {
     if (!currentGroup) {
         showMessage('请先选择一个小组', 'error');
         return;
     }
-    
-    const mobileUrl = `${window.location.origin}/mobile?group=${currentGroup.id}`;
+
+    const mobileUrl = buildMobileEvaluationUrl(currentGroup.id);
     window.open(mobileUrl, '_blank');
 }
 
@@ -823,7 +939,7 @@ function showMessage(message, type = 'info') {
 function showModal(content) {
     const modal = document.getElementById('modal');
     const modalBody = document.getElementById('modalBody');
-    
+
     modalBody.innerHTML = content;
     modal.classList.add('active');
     
@@ -841,6 +957,100 @@ function showModal(content) {
     };
 }
 
+function initializeLogoUpload({
+    fileInputId,
+    hiddenInputId,
+    previewContainerId,
+    previewImageId,
+    initialUrl = ''
+}) {
+    const fileInput = document.getElementById(fileInputId);
+    const hiddenInput = document.getElementById(hiddenInputId);
+    const previewContainer = document.getElementById(previewContainerId);
+    const previewImage = document.getElementById(previewImageId);
+
+    const updatePreview = (url) => {
+        if (!previewContainer || !previewImage) return;
+
+        if (url) {
+            previewImage.src = url;
+            previewContainer.style.display = 'flex';
+        } else {
+            previewImage.removeAttribute('src');
+            previewContainer.style.display = 'none';
+        }
+    };
+
+    const resolveInitialValue = () => {
+        if (!hiddenInput) {
+            updatePreview(initialUrl);
+            return;
+        }
+
+        if (!hiddenInput.value && initialUrl) {
+            hiddenInput.value = initialUrl;
+        }
+        updatePreview(hiddenInput.value || '');
+    };
+
+    resolveInitialValue();
+
+    if (!fileInput) {
+        return;
+    }
+
+    fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const previousValue = hiddenInput ? hiddenInput.value : '';
+
+        const uploadData = new FormData();
+        uploadData.append('file', file);
+
+        try {
+            const response = await fetch(`${API_BASE}/upload`, {
+                method: 'POST',
+                body: uploadData
+            });
+
+            const responseText = await response.text();
+            let result = {};
+            try {
+                result = responseText ? JSON.parse(responseText) : {};
+            } catch (error) {
+                console.warn('解析上传响应失败:', error);
+            }
+
+            if (!response.ok) {
+                throw new Error(result.error || '上传失败');
+            }
+
+            if (!result.file_path) {
+                throw new Error('上传失败');
+            }
+
+            if (hiddenInput) {
+                hiddenInput.value = result.file_path;
+            }
+
+            updatePreview(result.file_path);
+            showMessage('Logo上传成功', 'success');
+        } catch (error) {
+            console.error('Logo上传失败:', error);
+            showMessage(error.message || 'Logo上传失败', 'error');
+
+            if (hiddenInput) {
+                hiddenInput.value = previousValue;
+            }
+
+            updatePreview(previousValue);
+        } finally {
+            fileInput.value = '';
+        }
+    });
+}
+
 // 编辑小组
 function editGroup(groupId) {
     const group = groups.find(g => g.id === groupId);
@@ -854,8 +1064,13 @@ function editGroup(groupId) {
                 <input type="text" id="editGroupName" name="name" value="${group.name}" required>
             </div>
             <div class="form-group">
-                <label for="editGroupLogo">小组Logo URL:</label>
-                <input type="url" id="editGroupLogo" name="logo" value="${group.logo || ''}">
+                <label for="editGroupLogoUpload">小组Logo:</label>
+                <input type="file" id="editGroupLogoUpload" accept="image/*">
+                <input type="hidden" id="editGroupLogoInput" name="logo" value="${group.logo || ''}">
+                <p class="form-helper">支持 PNG/JPG/GIF，上传后会自动保存新的Logo。</p>
+                <div id="editGroupLogoPreview" class="logo-preview" style="display: none;">
+                    <img src="${group.logo || ''}" alt="小组Logo预览" id="editGroupLogoPreviewImg">
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit">保存</button>
@@ -864,10 +1079,18 @@ function editGroup(groupId) {
         </form>
     `;
     showModal(content);
-    
+
+    initializeLogoUpload({
+        fileInputId: 'editGroupLogoUpload',
+        hiddenInputId: 'editGroupLogoInput',
+        previewContainerId: 'editGroupLogoPreview',
+        previewImageId: 'editGroupLogoPreviewImg',
+        initialUrl: group.logo || ''
+    });
+
     document.getElementById('editGroupForm').addEventListener('submit', async function(event) {
         event.preventDefault();
-        
+
         const formData = new FormData(event.target);
         const data = Object.fromEntries(formData);
         
@@ -1573,8 +1796,13 @@ function showAddGroupModal() {
                 <input type="text" id="groupName" name="name" required>
             </div>
             <div class="form-group">
-                <label for="groupLogo">小组Logo URL:</label>
-                <input type="url" id="groupLogo" name="logo">
+                <label for="groupLogoUpload">小组Logo:</label>
+                <input type="file" id="groupLogoUpload" accept="image/*">
+                <input type="hidden" id="groupLogoInput" name="logo">
+                <p class="form-helper">支持 PNG/JPG/GIF，上传后会自动生成Logo链接。</p>
+                <div id="groupLogoPreview" class="logo-preview" style="display: none;">
+                    <img src="" alt="小组Logo预览" id="groupLogoPreviewImg">
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit">添加</button>
@@ -1583,7 +1811,14 @@ function showAddGroupModal() {
         </form>
     `;
     showModal(content);
-    
+
+    initializeLogoUpload({
+        fileInputId: 'groupLogoUpload',
+        hiddenInputId: 'groupLogoInput',
+        previewContainerId: 'groupLogoPreview',
+        previewImageId: 'groupLogoPreviewImg'
+    });
+
     document.getElementById('addGroupForm').addEventListener('submit', handleAddGroup);
 }
 
