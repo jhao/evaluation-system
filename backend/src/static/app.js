@@ -501,14 +501,6 @@ function updateDisplayScale() {
     }
 }
 
-function activateFullscreenUI() {
-    document.body.classList.add('fullscreen-mode');
-}
-
-function deactivateFullscreenUI() {
-    document.body.classList.remove('fullscreen-mode');
-}
-
 // 设置后台管理按钮事件
 function setupAdminButtonEvents() {
     // 添加小组按钮
@@ -1197,6 +1189,16 @@ function renderRanking(ranking) {
     ranking.forEach(item => {
         const rankingItem = document.createElement('div');
         rankingItem.className = `ranking-item rank-${item.rank} fade-in`;
+
+        let order = item.rank;
+        if (item.rank === 1) {
+            order = 2;
+        } else if (item.rank === 2) {
+            order = 1;
+        } else if (item.rank === 3) {
+            order = 3;
+        }
+        rankingItem.style.order = order;
         
         let crown = '';
         if (item.rank === 1) crown = '<div class="ranking-crown">👑</div>';

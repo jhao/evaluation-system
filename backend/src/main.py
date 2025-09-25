@@ -11,14 +11,26 @@ from src.models.evaluation import db
 from src.routes.evaluation import evaluation_bp
 
 DEFAULT_ADMIN_PASSWORD = 'tiandatiankai2025'
+ADMIN_PASSWORD_ENV_KEY = 'EVALUATION_ADMIN_PASSWORD'
 
 
 def resolve_admin_password():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--pwd', dest='admin_password')
     args, remaining = parser.parse_known_args()
-    sys.argv = [sys.argv[0], *remaining]
-    return args.admin_password or DEFAULT_ADMIN_PASSWORD
+
+    if remaining:
+        sys.argv = [sys.argv[0], *remaining]
+
+    if args.admin_password:
+        os.environ[ADMIN_PASSWORD_ENV_KEY] = args.admin_password
+        return args.admin_password
+
+    env_password = os.environ.get(ADMIN_PASSWORD_ENV_KEY)
+    if env_password:
+        return env_password
+
+    return DEFAULT_ADMIN_PASSWORD
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'evaluation_system_secret_key_2024'

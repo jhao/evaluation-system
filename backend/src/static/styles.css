@@ -894,19 +894,10 @@ body {
     order: 3;
 }
 
-.ranking-item.rank-4 {
-    height: 150px;
-    order: 0;
-}
-
-.ranking-item.rank-5 {
-    height: 150px;
-    order: 4;
-}
-
+.ranking-item.rank-4,
+.ranking-item.rank-5,
 .ranking-item.rank-6 {
     height: 150px;
-    order: 5;
 }
 
 .ranking-crown {
