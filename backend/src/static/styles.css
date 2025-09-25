@@ -112,6 +112,23 @@ body {
     color: #B0C4DE;
 }
 
+.logo-preview {
+    margin-top: 0.8rem;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    padding: 0.75rem;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.logo-preview img {
+    max-width: 160px;
+    max-height: 160px;
+    object-fit: contain;
+}
+
 /* 表单操作按钮 */
 .form-actions {
     display: flex;
@@ -212,6 +229,13 @@ body {
     font-weight: bold;
 }
 
+.nav-btn-icon {
+    font-size: 1.2rem;
+    padding: 0.6rem 0.9rem;
+    min-width: 0;
+    line-height: 1;
+}
+
 /* 页面容器 */
 .page {
     display: none;
@@ -221,6 +245,12 @@ body {
 
 .page.active {
     display: block;
+}
+
+#displayPage.page.active {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
 }
 
 /* 小组切换标签 */
@@ -264,66 +294,71 @@ body {
 /* 主要内容区域 */
 .main-content {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-columns: 1.2fr 1.6fr 1.2fr;
     gap: 2rem;
     max-width: 1400px;
     margin: 0 auto;
     min-height: 600px;
+    align-items: stretch;
 }
 
 /* 左侧面板 */
 .left-panel {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    padding: 1.5rem;
+    padding: 1.25rem;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    flex-direction: column;
 }
 
 .left-panel h3 {
     color: #FFD700;
-    margin-bottom: 1rem;
+    margin-bottom: 0.8rem;
     font-size: 1.3rem;
     text-align: center;
 }
 
-.members-list {
+#displayPage .members-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 0.8rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(68px, auto);
+    gap: 0.6rem;
+    flex: 1;
 }
 
-.member-card {
+#displayPage .member-card {
     background: rgba(255, 255, 255, 0.12);
-    padding: 0.9rem;
+    padding: 0.75rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    min-height: 90px;
+    min-height: 70px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     transition: transform 0.2s ease, background 0.2s ease;
 }
 
-.member-card:hover {
+#displayPage .member-card:hover {
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-3px);
 }
 
-.member-card-name {
+#displayPage .member-card-name {
     font-weight: 600;
-    font-size: 1rem;
-    margin-bottom: 0.4rem;
+    font-size: 0.95rem;
+    margin-bottom: 0.3rem;
 }
 
-.member-card-meta {
+#displayPage .member-card-meta {
     color: #B0C4DE;
-    font-size: 0.85rem;
-    line-height: 1.3;
+    font-size: 0.8rem;
+    line-height: 1.2;
     word-break: break-word;
 }
 
-.member-card-placeholder {
+#displayPage .member-card-placeholder {
     border-style: dashed;
     border-color: rgba(255, 255, 255, 0.3);
     background: rgba(255, 255, 255, 0.05);
@@ -476,13 +511,20 @@ body {
     min-width: 100%;
     height: 100%;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem;
 }
 
 .photo-slide img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 15px;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 12px;
 }
 
 .carousel-dots {
@@ -1335,6 +1377,86 @@ body {
     font-size: 1.1rem;
     padding: 15px 30px;
     border-radius: 15px;
+}
+
+.share-text {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: #B0C4DE;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.share-link {
+    color: #FFD700;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.share-link:hover,
+.share-link:focus {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+body.fullscreen-mode {
+    overflow: hidden;
+}
+
+body.fullscreen-mode .navbar {
+    display: none;
+}
+
+body.fullscreen-mode .page {
+    min-height: 100vh;
+    padding-top: 2rem;
+}
+
+body.fullscreen-mode #displayPage {
+    padding-bottom: 2rem;
+}
+
+body.fullscreen-mode .group-tabs {
+    margin-bottom: 1.2rem;
+}
+
+body.fullscreen-mode .main-content {
+    max-width: 100%;
+    width: 100%;
+    height: calc(100vh - 200px);
+}
+
+body.fullscreen-mode #displayPage .members-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fullscreen-exit-btn {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(10, 46, 93, 0.15);
+    color: #ffffff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2500;
+    backdrop-filter: blur(6px);
+    transition: all 0.3s ease;
+}
+
+body.fullscreen-mode .fullscreen-exit-btn {
+    display: flex;
+}
+
+.fullscreen-exit-btn:hover {
+    background: rgba(255, 215, 0, 0.25);
+    color: #FFD700;
+    border-color: rgba(255, 215, 0, 0.6);
 }
 
 /* 投票数据管理样式 */

@@ -17,6 +17,9 @@
                     <button id="adminBtn" class="nav-btn">后台管理</button>
                     <button id="rankingBtn" class="nav-btn">查看排名</button>
                     <button id="displayBtn" class="nav-btn active">大屏展示</button>
+                    <button id="fullscreenToggle" class="nav-btn nav-btn-icon" title="全屏展示" aria-label="全屏展示">
+                        ⤢
+                    </button>
                 </div>
             </div>
         </nav>
@@ -53,6 +56,7 @@
 
                     <div class="action-section">
                         <button id="openMobileBtn" class="btn btn-primary">进入评价页面</button>
+                        <p class="share-text">复制链接访问评价页：<a id="evaluationShareLink" class="share-link" href="#" target="_blank" rel="noopener">请选择小组</a></p>
                     </div>
                 </div>
 
@@ -201,6 +205,8 @@
             <div id="modalBody"></div>
         </div>
     </div>
+
+    <button id="exitFullscreenBtn" class="fullscreen-exit-btn" aria-label="退出全屏" title="退出全屏">✕</button>
 
     <!-- 隐藏的文件上传input -->
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
