@@ -75,6 +75,7 @@ class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
+    company = db.Column(db.String(100))  # 公司名称
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -83,6 +84,7 @@ class Member(db.Model):
             'id': self.id,
             'group_id': self.group_id,
             'name': self.name,
+            'company': self.company,
             'role_id': self.role_id,
             'role_name': self.role.name if self.role else None,
             'created_at': self.created_at.isoformat() if self.created_at else None

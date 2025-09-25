@@ -134,6 +134,80 @@ def delete_member(member_id):
     db.session.commit()
     return '', 204
 
+# ==================== 小组成员管理API ====================
+
+@evaluation_bp.route('/groups/<int:group_id>/members', methods=['GET'])
+def get_group_members(group_id):
+    """获取小组成员"""
+    group = Group.query.get_or_404(group_id)
+    members = Member.query.filter_by(group_id=group_id).all()
+    return jsonify([member.to_dict() for member in members])
+
+@evaluation_bp.route('/groups/<int:group_id>/members', methods=['POST'])
+def add_group_member(group_id):
+    """添加小组成员"""
+    group = Group.query.get_or_404(group_id)
+    data = request.get_json()
+    
+    # 验证必填字段
+    if not data.get('name'):
+        return jsonify({'error': '成员姓名不能为空'}), 400
+    if not data.get('role_id'):
+        return jsonify({'error': '职务不能为空'}), 400
+    
+    # 验证职务是否存在
+    role = Role.query.get(data['role_id'])
+    if not role:
+        return jsonify({'error': '职务不存在'}), 400
+    
+    member = Member(
+        group_id=group_id,
+        name=data['name'],
+        company=data.get('company', ''),
+        role_id=data['role_id']
+    )
+    
+    db.session.add(member)
+    db.session.commit()
+    
+    return jsonify(member.to_dict()), 201
+
+@evaluation_bp.route('/groups/<int:group_id>/members/<int:member_id>', methods=['PUT'])
+def update_group_member(group_id, member_id):
+    """更新小组成员"""
+    member = Member.query.filter_by(id=member_id, group_id=group_id).first_or_404()
+    data = request.get_json()
+    
+    # 验证必填字段
+    if 'name' in data and not data['name']:
+        return jsonify({'error': '成员姓名不能为空'}), 400
+    if 'role_id' in data and not data['role_id']:
+        return jsonify({'error': '职务不能为空'}), 400
+    
+    # 验证职务是否存在
+    if 'role_id' in data:
+        role = Role.query.get(data['role_id'])
+        if not role:
+            return jsonify({'error': '职务不存在'}), 400
+        member.role_id = data['role_id']
+    
+    # 更新字段
+    if 'name' in data:
+        member.name = data['name']
+    if 'company' in data:
+        member.company = data['company']
+    
+    db.session.commit()
+    return jsonify(member.to_dict())
+
+@evaluation_bp.route('/groups/<int:group_id>/members/<int:member_id>', methods=['DELETE'])
+def delete_group_member(group_id, member_id):
+    """删除小组成员"""
+    member = Member.query.filter_by(id=member_id, group_id=group_id).first_or_404()
+    db.session.delete(member)
+    db.session.commit()
+    return '', 204
+
 # ==================== 评价人管理API ====================
 
 @evaluation_bp.route('/voters', methods=['GET'])

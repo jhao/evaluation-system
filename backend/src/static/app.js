@@ -215,6 +215,18 @@ async function apiCall(url, options = {}) {
             throw new Error(errorData.error || `HTTP ${response.status}`);
         }
         
+        // 处理204 No Content响应（删除操作通常返回此状态码）
+        if (response.status === 204) {
+            return null;
+        }
+        
+        // 检查响应是否有内容
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            const text = await response.text();
+            return text ? JSON.parse(text) : null;
+        }
+        
         return await response.json();
     } catch (error) {
         console.error('API调用失败:', error);
@@ -292,7 +304,7 @@ function updateGroupDisplay() {
     }
     
     // 更新投票统计
-    updateVoteStats();
+    updateVoteStats(currentGroup ? currentGroup.vote_stats : null);
     
     // 更新照片轮播
     updatePhotoCarousel();
@@ -300,19 +312,29 @@ function updateGroupDisplay() {
 
 // 更新投票统计
 function updateVoteStats(stats) {
-    const likeCount = document.getElementById('likeCount');
-    const dislikeCount = document.getElementById('dislikeCount');
+    // 如果没有传入stats参数，尝试从currentGroup获取
+    if (!stats && currentGroup && currentGroup.vote_stats) {
+        stats = currentGroup.vote_stats;
+    }
     
-    if (likeCount) likeCount.textContent = stats.likes || 0;
-    if (dislikeCount) dislikeCount.textContent = stats.dislikes || 0;
+    // 如果仍然没有stats，使用默认值
+    if (!stats) {
+        stats = { likes: 0, dislikes: 0 };
+    }
+    
+    const totalScore = document.getElementById('totalScore');
+    
+    // 计算总计分：赞的分数总和 - 踩的分数总和
+    const score = (stats.likes || 0) - (stats.dislikes || 0);
+    if (totalScore) totalScore.textContent = score;
     
     // 添加动画效果
-    [likeCount, dislikeCount].forEach(el => {
-        if (el) {
-            el.classList.add('pulse');
-            setTimeout(() => el.classList.remove('pulse'), 2000);
-        }
-    });
+    if (totalScore) {
+        totalScore.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+            totalScore.style.transform = 'scale(1)';
+        }, 200);
+    }
 }
 
 // 加载小组成员
@@ -336,22 +358,18 @@ function renderMembersList(members) {
     const membersList = document.getElementById('membersList');
     if (!membersList) return;
     
-    membersList.innerHTML = '';
-    
     if (members.length === 0) {
         membersList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无成员</p>';
         return;
     }
     
-    members.forEach(member => {
-        const memberItem = document.createElement('div');
-        memberItem.className = 'member-item fade-in';
-        memberItem.innerHTML = `
+    membersList.innerHTML = members.map(member => `
+        <div class="member-item">
             <div class="member-name">${member.name}</div>
-            <div class="member-role">${member.role_name || '未设置职务'}</div>
-        `;
-        membersList.appendChild(memberItem);
-    });
+            <div class="member-role">${member.role_name || '未知职务'}</div>
+            ${member.company ? `<div class="member-company">${member.company}</div>` : ''}
+        </div>
+    `).join('');
 }
 
 // 更新照片轮播
@@ -568,6 +586,7 @@ function renderAdminGroups(groups) {
             </div>
             <div class="admin-item-actions">
                 <button class="btn btn-secondary" onclick="editGroup(${group.id})">编辑</button>
+                <button class="btn btn-info" onclick="manageGroupMembers(${group.id})">管理成员</button>
                 <button class="btn ${group.status === 0 ? 'btn-danger' : 'btn-primary'}" 
                         onclick="toggleGroupLock(${group.id}, ${group.status === 0})">
                     ${group.status === 0 ? '锁定' : '解锁'}
@@ -723,16 +742,25 @@ function showMessage(message, type = 'info') {
     }, 3000);
 }
 
-function showModal(title, content) {
+function showModal(content) {
     const modal = document.getElementById('modal');
     const modalBody = document.getElementById('modalBody');
     
-    modalBody.innerHTML = `
-        <h3 style="color: #FFD700; margin-bottom: 1rem;">${title}</h3>
-        ${content}
-    `;
-    
+    modalBody.innerHTML = content;
     modal.classList.add('active');
+    
+    // 添加关闭按钮事件
+    const closeBtn = modal.querySelector('.close');
+    if (closeBtn) {
+        closeBtn.onclick = closeModal;
+    }
+    
+    // 点击模态框外部关闭
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeModal();
+        }
+    };
 }
 
 // 编辑小组
@@ -779,6 +807,199 @@ function editGroup(groupId) {
             showMessage('更新失败: ' + error.message, 'error');
         }
     });
+}
+
+// 管理小组成员
+async function manageGroupMembers(groupId) {
+    try {
+        const [members, roles] = await Promise.all([
+            apiCall(`/groups/${groupId}/members`),
+            apiCall('/roles')
+        ]);
+        
+        const group = groups.find(g => g.id === groupId);
+        const groupName = group ? group.name : '未知小组';
+        
+        const content = `
+            <h3>管理小组成员 - ${groupName}</h3>
+            <div class="member-management">
+                <div class="admin-header">
+                    <button class="btn btn-primary" onclick="showAddMemberModal(${groupId})">添加成员</button>
+                </div>
+                <div id="membersList" class="admin-list">
+                    ${renderMembersManagement(members, roles)}
+                </div>
+            </div>
+        `;
+        showModal(content);
+        
+    } catch (error) {
+        showMessage('加载小组成员失败: ' + error.message, 'error');
+    }
+}
+
+function renderMembersManagement(members, roles) {
+    if (members.length === 0) {
+        return '<p style="text-align: center; color: #B0C4DE;">暂无成员</p>';
+    }
+    
+    return members.map(member => `
+        <div class="admin-item">
+            <div class="admin-item-info">
+                <div class="admin-item-title">${member.name}</div>
+                <div class="admin-item-details">
+                    ${member.company ? `公司: ${member.company} | ` : ''}职务: ${member.role_name || '未知'}
+                </div>
+            </div>
+            <div class="admin-item-actions">
+                <button class="btn btn-secondary" onclick="editMember(${member.group_id}, ${member.id})">编辑</button>
+                <button class="btn btn-danger" onclick="deleteMember(${member.group_id}, ${member.id})">删除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 显示添加成员模态框
+async function showAddMemberModal(groupId) {
+    try {
+        const roles = await apiCall('/roles');
+        
+        const content = `
+            <h3>添加小组成员</h3>
+            <form id="addMemberForm">
+                <div class="form-group">
+                    <label for="memberName">成员姓名:</label>
+                    <input type="text" id="memberName" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="memberCompany">公司名称:</label>
+                    <input type="text" id="memberCompany" name="company">
+                </div>
+                <div class="form-group">
+                    <label for="memberRole">职务:</label>
+                    <select id="memberRole" name="role_id" required>
+                        <option value="">请选择职务</option>
+                        ${roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">添加</button>
+                    <button type="button" onclick="closeModal()">取消</button>
+                </div>
+            </form>
+        `;
+        showModal(content);
+        
+        document.getElementById('addMemberForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData);
+            data.role_id = parseInt(data.role_id);
+            
+            try {
+                await apiCall(`/groups/${groupId}/members`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                
+                showMessage('成员添加成功', 'success');
+                closeModal();
+                manageGroupMembers(groupId); // 刷新成员列表
+                loadGroupMembers(); // 刷新主页面成员显示
+            } catch (error) {
+                showMessage('添加失败: ' + error.message, 'error');
+            }
+        });
+        
+    } catch (error) {
+        showMessage('加载职务列表失败: ' + error.message, 'error');
+    }
+}
+
+// 编辑成员
+async function editMember(groupId, memberId) {
+    try {
+        const [members, roles] = await Promise.all([
+            apiCall(`/groups/${groupId}/members`),
+            apiCall('/roles')
+        ]);
+        
+        const member = members.find(m => m.id === memberId);
+        if (!member) {
+            showMessage('成员不存在', 'error');
+            return;
+        }
+        
+        const content = `
+            <h3>编辑小组成员</h3>
+            <form id="editMemberForm">
+                <div class="form-group">
+                    <label for="editMemberName">成员姓名:</label>
+                    <input type="text" id="editMemberName" name="name" value="${member.name}" required>
+                </div>
+                <div class="form-group">
+                    <label for="editMemberCompany">公司名称:</label>
+                    <input type="text" id="editMemberCompany" name="company" value="${member.company || ''}">
+                </div>
+                <div class="form-group">
+                    <label for="editMemberRole">职务:</label>
+                    <select id="editMemberRole" name="role_id" required>
+                        <option value="">请选择职务</option>
+                        ${roles.map(role => `
+                            <option value="${role.id}" ${role.id === member.role_id ? 'selected' : ''}>
+                                ${role.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">保存</button>
+                    <button type="button" onclick="closeModal()">取消</button>
+                </div>
+            </form>
+        `;
+        showModal(content);
+        
+        document.getElementById('editMemberForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData);
+            data.role_id = parseInt(data.role_id);
+            
+            try {
+                await apiCall(`/groups/${groupId}/members/${memberId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+                
+                showMessage('成员更新成功', 'success');
+                closeModal();
+                manageGroupMembers(groupId); // 刷新成员列表
+                loadGroupMembers(); // 刷新主页面成员显示
+            } catch (error) {
+                showMessage('更新失败: ' + error.message, 'error');
+            }
+        });
+        
+    } catch (error) {
+        showMessage('加载成员信息失败: ' + error.message, 'error');
+    }
+}
+
+// 删除成员
+async function deleteMember(groupId, memberId) {
+    if (!confirm('确定要删除这个成员吗？')) return;
+    
+    try {
+        await apiCall(`/groups/${groupId}/members/${memberId}`, { method: 'DELETE' });
+        showMessage('成员已删除', 'success');
+        manageGroupMembers(groupId); // 刷新成员列表
+        loadGroupMembers(); // 刷新主页面成员显示
+    } catch (error) {
+        showMessage('删除失败: ' + error.message, 'error');
+    }
 }
 
 // 编辑评价人
