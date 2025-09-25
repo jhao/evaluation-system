@@ -105,35 +105,6 @@ def delete_role(role_id):
     db.session.commit()
     return '', 204
 
-# ==================== 成员管理API ====================
-
-@evaluation_bp.route('/groups/<int:group_id>/members', methods=['GET'])
-def get_group_members(group_id):
-    """获取小组成员"""
-    members = Member.query.filter_by(group_id=group_id).all()
-    return jsonify([member.to_dict() for member in members])
-
-@evaluation_bp.route('/groups/<int:group_id>/members', methods=['POST'])
-def add_group_member(group_id):
-    """添加小组成员"""
-    data = request.get_json()
-    member = Member(
-        group_id=group_id,
-        name=data.get('name'),
-        role_id=data.get('role_id')
-    )
-    db.session.add(member)
-    db.session.commit()
-    return jsonify(member.to_dict()), 201
-
-@evaluation_bp.route('/members/<int:member_id>', methods=['DELETE'])
-def delete_member(member_id):
-    """删除成员"""
-    member = Member.query.get_or_404(member_id)
-    db.session.delete(member)
-    db.session.commit()
-    return '', 204
-
 # ==================== 小组成员管理API ====================
 
 @evaluation_bp.route('/groups/<int:group_id>/members', methods=['GET'])
