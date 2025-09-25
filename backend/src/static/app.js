@@ -121,6 +121,12 @@ function setupEventListeners() {
     if (verifyForm) {
         verifyForm.addEventListener('submit', handleVerifySubmit);
     }
+
+    // 大屏进入评价页面按钮
+    const openMobileBtn = document.getElementById('openMobileBtn');
+    if (openMobileBtn) {
+        openMobileBtn.addEventListener('click', openMobilePage);
+    }
     
     // 投票按钮
     const likeBtn = document.getElementById('likeBtn');
