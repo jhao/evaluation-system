@@ -288,6 +288,11 @@ body {
     transition: all 0.3s ease;
 }
 
+.nav-btn.nav-btn-secondary {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
 .nav-btn:hover {
     background: #ffffff;
     color: #0A2E5D;
@@ -295,11 +300,19 @@ body {
     box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
 }
 
+.nav-btn.nav-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.85);
+}
+
 .nav-btn.active {
     background: #FFD700;
     border-color: #FFD700;
     color: #0A2E5D;
     font-weight: bold;
+}
+
+.hidden {
+    display: none !important;
 }
 
 .nav-btn-icon {

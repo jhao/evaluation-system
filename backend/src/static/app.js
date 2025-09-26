@@ -30,7 +30,8 @@ function initializeApp() {
     setupSocketConnection();
     setupEventListeners();
     loadInitialData();
-    
+    updateAdminAuthUI();
+
     // 检查URL参数，如果有group参数则显示手机端页面
     const urlParams = new URLSearchParams(window.location.search);
     const groupId = urlParams.get('group');
@@ -44,6 +45,11 @@ function setupNavigation() {
     const navButtons = document.querySelectorAll('.nav-btn');
     navButtons.forEach(btn => {
         if (btn.id === 'fullscreenToggle') {
+            return;
+        }
+
+        if (btn.id === 'adminLogoutBtn') {
+            btn.addEventListener('click', handleAdminLogout);
             return;
         }
 
@@ -75,6 +81,14 @@ function getAdminToken() {
     return adminToken || '';
 }
 
+function updateAdminAuthUI() {
+    const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+    if (adminLogoutBtn) {
+        const isAuthenticated = Boolean(getAdminToken());
+        adminLogoutBtn.classList.toggle('hidden', !isAuthenticated);
+    }
+}
+
 function setAdminToken(token) {
     adminToken = token || '';
     if (adminToken) {
@@ -82,6 +96,7 @@ function setAdminToken(token) {
     } else {
         localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
     }
+    updateAdminAuthUI();
 }
 
 function clearAdminToken() {
@@ -203,6 +218,81 @@ async function loginAdmin(username, password) {
     setAdminToken(result.token);
     adminAuthPromptVisible = false;
     return result;
+}
+
+async function requestAdminLogout() {
+    const token = getAdminToken();
+    if (!token) {
+        return;
+    }
+
+    const response = await authorizedFetch(API_BASE + '/admin/logout', {
+        method: 'POST'
+    });
+
+    if (!response.ok && response.status !== 401) {
+        let message = '退出登录失败';
+        const responseText = await response.text().catch(() => '');
+        if (responseText) {
+            try {
+                const data = JSON.parse(responseText);
+                message = data.error || data.message || message;
+            } catch (parseError) {
+                console.warn('解析退出响应失败:', parseError);
+            }
+        }
+
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
+    }
+}
+
+function finalizeAdminLogout(message = '已退出登录', messageType = 'success') {
+    const adminPage = document.getElementById('adminPage');
+    const wasAdminActive = adminPage && adminPage.classList.contains('active');
+
+    adminAuthPromptVisible = false;
+    clearAdminToken();
+
+    if (wasAdminActive) {
+        showPage('displayPage');
+        setActiveNavButton('displayBtn');
+    }
+
+    if (message) {
+        showMessage(message, messageType);
+    }
+}
+
+async function handleAdminLogout(event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    const trigger = event ? event.currentTarget : null;
+    if (trigger) {
+        trigger.disabled = true;
+    }
+
+    let feedbackMessage = '已退出登录';
+    let feedbackType = 'success';
+
+    try {
+        await requestAdminLogout();
+    } catch (error) {
+        if (!error.status || error.status !== 401) {
+            console.error('退出登录失败:', error);
+            feedbackMessage = error.message || '退出登录失败，请稍后重试';
+            feedbackType = 'error';
+        }
+    } finally {
+        if (trigger) {
+            trigger.disabled = false;
+        }
+    }
+
+    finalizeAdminLogout(feedbackMessage, feedbackType);
 }
 
 function handleAdminUnauthorized() {
