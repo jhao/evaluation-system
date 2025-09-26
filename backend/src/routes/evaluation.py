@@ -77,6 +77,13 @@ def admin_login():
     token = generate_admin_token(username)
     return jsonify({'token': token, 'username': username})
 
+
+@evaluation_bp.route('/admin/logout', methods=['POST'])
+@admin_required
+def admin_logout():
+    """管理员退出登录"""
+    return jsonify({'message': '退出登录成功'})
+
 # 文件上传配置
 UPLOAD_FOLDER = 'src/static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'xlsx', 'xls'}
