@@ -1,0 +1,16 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720' style='background:#081428'>
+<rect id='frame' x='40' y='40' width='1200' height='640' rx='24' fill='none' stroke='#2d5be3' stroke-width='4' />
+<text x='80' y='110' fill='#f8f9ff' font-family='Inter, Noto Sans SC, sans-serif' font-size='40' font-weight='600'>后台管理中心示意</text>
+<rect id='card' x='80' y='120' width='1120' height='120' rx='18' fill='none' stroke='#3da9fc' stroke-width='2' />
+<text x='110' y='160' fill='#ffd803' font-family='Inter, Noto Sans SC, sans-serif' font-size='28' font-weight='600'>小组与成员管理</text>
+<text x='110' y='200' fill='#d7e3fc' font-family='Inter, Noto Sans SC, sans-serif' font-size='22' font-weight='normal'>批量维护小组信息、成员列表与风采照片</text>
+<rect id='card' x='80' y='270' width='1120' height='120' rx='18' fill='none' stroke='#3da9fc' stroke-width='2' />
+<text x='110' y='310' fill='#ffd803' font-family='Inter, Noto Sans SC, sans-serif' font-size='28' font-weight='600'>评价人与权重</text>
+<text x='110' y='350' fill='#d7e3fc' font-family='Inter, Noto Sans SC, sans-serif' font-size='22' font-weight='normal'>支持 Excel 导入，按角色配置不同投票权重</text>
+<rect id='card' x='80' y='420' width='1120' height='120' rx='18' fill='none' stroke='#3da9fc' stroke-width='2' />
+<text x='110' y='460' fill='#ffd803' font-family='Inter, Noto Sans SC, sans-serif' font-size='28' font-weight='600'>投票数据面板</text>
+<text x='110' y='500' fill='#d7e3fc' font-family='Inter, Noto Sans SC, sans-serif' font-size='22' font-weight='normal'>按小组筛选记录，导出汇总数据进行复核</text>
+<rect id='card' x='80' y='570' width='1120' height='120' rx='18' fill='none' stroke='#3da9fc' stroke-width='2' />
+<text x='110' y='610' fill='#ffd803' font-family='Inter, Noto Sans SC, sans-serif' font-size='28' font-weight='600'>初始化工具</text>
+<text x='110' y='650' fill='#d7e3fc' font-family='Inter, Noto Sans SC, sans-serif' font-size='22' font-weight='normal'>一键生成演示数据，便于快速部署与演示</text>
+</svg>
