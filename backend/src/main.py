@@ -87,7 +87,7 @@ def serve(path):
             return "Static folder not configured", 404
 
     # 特殊处理手机端路由
-    if path == 'mobile':
+    if path in ('mobile', 'm'):
         mobile_path = os.path.join(static_folder_path, 'mobile.html')
         if os.path.exists(mobile_path):
             return send_from_directory(static_folder_path, 'mobile.html')
