@@ -310,7 +310,7 @@
             try {
                 // 从URL获取小组ID
                 const urlParams = new URLSearchParams(window.location.search);
-                const groupId = urlParams.get('group');
+                const groupId = urlParams.get('g') || urlParams.get('group');
                 
                 if (!groupId) {
                     showStep('errorStep');

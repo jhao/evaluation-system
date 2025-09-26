@@ -593,6 +593,43 @@ body {
     transition: transform 0.5s ease;
 }
 
+.carousel-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.35);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.3s ease;
+    z-index: 2;
+}
+
+.carousel-nav:hover:not(:disabled) {
+    background: rgba(255, 215, 0, 0.6);
+    transform: translateY(-50%) scale(1.05);
+}
+
+.carousel-nav:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.carousel-nav-prev {
+    left: 12px;
+}
+
+.carousel-nav-next {
+    right: 12px;
+}
+
 .photo-slide {
     min-width: 100%;
     height: 100%;
@@ -905,12 +942,6 @@ body {
     color: #ffffff;
     border-color: #CD7F32;
     order: 3;
-}
-
-.ranking-item.rank-4,
-.ranking-item.rank-5,
-.ranking-item.rank-6 {
-    height: 150px;
 }
 
 .ranking-crown {

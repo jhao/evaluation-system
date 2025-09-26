@@ -6,6 +6,7 @@ let roles = [];
 let voters = [];
 let currentVoter = null;
 let photoCarouselInterval;
+let currentPhotoSlide = 0;
 let manualFullscreen = false;
 let fullscreenTargetPageId = null;
 
@@ -32,9 +33,9 @@ function initializeApp() {
     loadInitialData();
     updateAdminAuthUI();
 
-    // 检查URL参数，如果有group参数则显示手机端页面
+    // 检查URL参数，如果有小组参数则显示手机端页面
     const urlParams = new URLSearchParams(window.location.search);
-    const groupId = urlParams.get('group');
+    const groupId = urlParams.get('g') || urlParams.get('group');
     if (groupId) {
         showMobilePage(groupId);
     }
@@ -399,7 +400,17 @@ function setupEventListeners() {
     if (openMobileBtn) {
         openMobileBtn.addEventListener('click', openMobilePage);
     }
-    
+
+    const photoPrevBtn = document.getElementById('photoPrevBtn');
+    if (photoPrevBtn) {
+        photoPrevBtn.addEventListener('click', showPreviousPhoto);
+    }
+
+    const photoNextBtn = document.getElementById('photoNextBtn');
+    if (photoNextBtn) {
+        photoNextBtn.addEventListener('click', showNextPhoto);
+    }
+
     // 投票按钮
     const likeBtn = document.getElementById('likeBtn');
     const dislikeBtn = document.getElementById('dislikeBtn');
@@ -929,8 +940,8 @@ function renderMembersList(members) {
     const placeholdersNeeded = Math.max(0, 15 - memberCards.length);
     const placeholders = Array.from({ length: placeholdersNeeded }).map(() => `
         <div class="member-card member-card-placeholder">
-            <div class="member-card-name">待补充</div>
-            <div class="member-card-meta">欢迎加入</div>
+            <div class="member-card-name"></div>
+            <div class="member-card-meta"></div>
         </div>
     `);
 
@@ -941,63 +952,98 @@ function renderMembersList(members) {
 function updatePhotoCarousel() {
     const photoSlides = document.getElementById('photoSlides');
     const carouselDots = document.getElementById('carouselDots');
-    
+    const prevButton = document.getElementById('photoPrevBtn');
+    const nextButton = document.getElementById('photoNextBtn');
+
     if (!photoSlides || !carouselDots || !currentGroup) return;
-    
+
     // 清除现有轮播
     if (photoCarouselInterval) {
         clearInterval(photoCarouselInterval);
     }
-    
+
     const photos = currentGroup.photos || [];
-    
+
+    if (prevButton) {
+        prevButton.disabled = photos.length <= 1;
+        prevButton.style.display = photos.length === 0 ? 'none' : 'flex';
+    }
+
+    if (nextButton) {
+        nextButton.disabled = photos.length <= 1;
+        nextButton.style.display = photos.length === 0 ? 'none' : 'flex';
+    }
+
     if (photos.length === 0) {
+        currentPhotoSlide = 0;
         photoSlides.innerHTML = '<div class="photo-slide"><div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #B0C4DE;">暂无照片</div></div>';
         carouselDots.innerHTML = '';
         return;
     }
-    
+
     // 渲染照片
     photoSlides.innerHTML = '';
     carouselDots.innerHTML = '';
-    
+
     photos.forEach((photo, index) => {
         const slide = document.createElement('div');
         slide.className = 'photo-slide';
         slide.innerHTML = `<img src="${photo}" alt="小组照片${index + 1}">`;
         photoSlides.appendChild(slide);
-        
+
         const dot = document.createElement('div');
         dot.className = `carousel-dot ${index === 0 ? 'active' : ''}`;
         dot.addEventListener('click', () => showPhotoSlide(index));
         carouselDots.appendChild(dot);
     });
-    
+
+    currentPhotoSlide = 0;
+    showPhotoSlide(currentPhotoSlide);
+
     // 自动轮播
-    let currentSlide = 0;
     photoCarouselInterval = setInterval(() => {
-        currentSlide = (currentSlide + 1) % photos.length;
-        showPhotoSlide(currentSlide);
-    }, 5000);
+        currentPhotoSlide = (currentPhotoSlide + 1) % photos.length;
+        showPhotoSlide(currentPhotoSlide);
+    }, 4000);
 }
 
 // 显示指定照片
 function showPhotoSlide(index) {
     const photoSlides = document.getElementById('photoSlides');
     const dots = document.querySelectorAll('.carousel-dot');
-    
+
     if (photoSlides) {
         photoSlides.style.transform = `translateX(-${index * 100}%)`;
     }
-    
+
     dots.forEach((dot, i) => {
         dot.classList.toggle('active', i === index);
     });
+
+    currentPhotoSlide = index;
+}
+
+function showPreviousPhoto() {
+    const photoSlides = document.getElementById('photoSlides');
+    if (!photoSlides || photoSlides.children.length === 0) return;
+
+    const totalSlides = photoSlides.children.length;
+    const targetIndex = (currentPhotoSlide - 1 + totalSlides) % totalSlides;
+    showPhotoSlide(targetIndex);
+}
+
+function showNextPhoto() {
+    const photoSlides = document.getElementById('photoSlides');
+    if (!photoSlides || photoSlides.children.length === 0) return;
+
+    const totalSlides = photoSlides.children.length;
+    const targetIndex = (currentPhotoSlide + 1) % totalSlides;
+    showPhotoSlide(targetIndex);
 }
 
 // 打开手机端评价页面
 function buildMobileEvaluationUrl(groupId) {
-    return `${window.location.origin}/mobile?group=${groupId}`;
+    return `${window.location.origin}/m?g=${groupId}`;
 }
 
 function openMobilePage() {
