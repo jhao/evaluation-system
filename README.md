@@ -168,6 +168,35 @@ flowchart LR
 
 ## 部署说明
 
+### Docker 镜像
+支持通过 Docker 将系统打包并运行，数据库与上传文件均可通过挂载卷的方式持久化到宿主机。
+
+1. **构建镜像**
+   ```bash
+   docker build -t evaluation-system:latest .
+   ```
+
+2. **准备持久化目录**（位于项目根目录外部亦可）
+   ```bash
+   mkdir -p data/uploads data/database
+   ```
+
+3. **启动容器**
+   ```bash
+   docker run -d \
+     --name evaluation-system \
+     -p 5001:5001 \
+     -v $(pwd)/data/uploads:/app/backend/src/static/uploads \
+     -v $(pwd)/data/database:/app/backend/src/database \
+     -e EVALUATION_ADMIN_PASSWORD=你的管理员密码 \
+     evaluation-system:latest
+   ```
+
+   - `-v` 选项会将上传文件 (`src/static/uploads`) 与数据库 (`src/database/app.db`) 映射到宿主机 `data` 目录。
+   - 容器会以 `python src/main.py --pwd=$EVALUATION_ADMIN_PASSWORD` 启动，确保管理员密码在启动时写入配置。
+   - 如需查看启动日志，可执行 `docker logs -f evaluation-system`。
+   - 停止容器：`docker stop evaluation-system`，重新启动：`docker start evaluation-system`。
+
 ### 开发环境
 项目已配置为开发模式，支持热重载和调试。可通过 `python src/main.py --pwd <新密码>` 在启动时临时覆盖管理员密码。
 
