@@ -10,7 +10,7 @@ from io import BytesIO
 from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from functools import wraps
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import qrcode
 
@@ -23,6 +23,45 @@ TOKEN_MAX_AGE = 12 * 60 * 60
 def get_token_serializer():
     secret_key = current_app.config.get('SECRET_KEY', 'evaluation_system_secret_key_2024')
     return URLSafeTimedSerializer(secret_key, salt=TOKEN_SALT)
+
+
+def _extract_forwarded_header(header_name):
+    """获取首个转发头信息，忽略额外的代理层信息"""
+    header_value = (request.headers.get(header_name) or '').strip()
+    if not header_value:
+        return ''
+    return header_value.split(',')[0].strip()
+
+
+def _build_request_origin():
+    """根据请求和转发头还原包含端口的请求源地址"""
+    forwarded_proto = _extract_forwarded_header('X-Forwarded-Proto')
+    forwarded_host = _extract_forwarded_header('X-Forwarded-Host')
+    forwarded_port = _extract_forwarded_header('X-Forwarded-Port')
+
+    scheme = forwarded_proto or request.scheme
+    host = forwarded_host or request.host
+
+    # 如果Host头没有包含端口，尝试从转发端口或服务器端口补全
+    if ':' not in host:
+        port = forwarded_port or (request.environ.get('SERVER_PORT') or '').strip()
+        if port and not ((scheme == 'http' and port == '80') or (scheme == 'https' and port == '443')):
+            host = f"{host}:{port}"
+    elif forwarded_port:
+        # 当代理重新指定了端口时，需要替换原Host中的端口
+        hostname = host.split(':', 1)[0]
+        if not ((scheme == 'http' and forwarded_port == '80') or (scheme == 'https' and forwarded_port == '443')):
+            host = f"{hostname}:{forwarded_port}"
+        else:
+            host = hostname
+
+    base_url = f"{scheme}://{host}/"
+    parsed = urlparse(request.host_url)
+    # 保留原始应用部署可能设置的路径前缀
+    if parsed.path and parsed.path != '/':
+        base_url = urljoin(base_url, parsed.path.lstrip('/'))
+
+    return base_url
 
 
 def generate_admin_token(username):
@@ -119,7 +158,8 @@ def get_group_qrcode(group_id):
         target_url = requested_url
     else:
         mobile_path = f"m?g={group_id}"
-        target_url = urljoin(request.host_url, mobile_path)
+        base_origin = _build_request_origin()
+        target_url = urljoin(base_origin, mobile_path)
 
     qr = qrcode.QRCode(
         version=None,
