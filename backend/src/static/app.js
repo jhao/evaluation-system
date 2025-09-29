@@ -9,6 +9,7 @@ let photoCarouselInterval;
 let currentPhotoSlide = 0;
 let manualFullscreen = false;
 let fullscreenTargetPageId = null;
+let evaluationQrCodeInstance = null;
 
 const ADMIN_TOKEN_STORAGE_KEY = 'evaluationAdminToken';
 let adminToken = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
@@ -395,10 +396,21 @@ function setupEventListeners() {
         verifyForm.addEventListener('submit', handleVerifySubmit);
     }
 
-    // 大屏进入评价页面按钮
-    const openMobileBtn = document.getElementById('openMobileBtn');
-    if (openMobileBtn) {
-        openMobileBtn.addEventListener('click', openMobilePage);
+    // 大屏评价二维码交互
+    const evaluationQrWrapper = document.getElementById('evaluationQrWrapper');
+    if (evaluationQrWrapper) {
+        const handleOpenMobile = (event) => {
+            event.preventDefault();
+            openMobilePage();
+        };
+
+        evaluationQrWrapper.addEventListener('click', handleOpenMobile);
+        evaluationQrWrapper.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                event.preventDefault();
+                openMobilePage();
+            }
+        });
     }
 
     const photoPrevBtn = document.getElementById('photoPrevBtn');
@@ -830,16 +842,19 @@ function selectGroup(group) {
 // 更新小组显示
 function updateGroupDisplay() {
     const shareLinkElement = document.getElementById('evaluationShareLink');
-    if (shareLinkElement) {
-        if (currentGroup) {
-            const mobileUrl = buildMobileEvaluationUrl(currentGroup.id);
+    let mobileUrl = null;
+    if (currentGroup) {
+        mobileUrl = buildMobileEvaluationUrl(currentGroup.id);
+        if (shareLinkElement) {
             shareLinkElement.textContent = mobileUrl;
             shareLinkElement.href = mobileUrl;
-        } else {
-            shareLinkElement.textContent = '请选择小组';
-            shareLinkElement.href = '#';
         }
+    } else if (shareLinkElement) {
+        shareLinkElement.textContent = '请选择小组';
+        shareLinkElement.href = '#';
     }
+
+    updateEvaluationQrCode(mobileUrl);
 
     if (!currentGroup) return;
 
@@ -861,6 +876,43 @@ function updateGroupDisplay() {
 
     // 更新照片轮播
     updatePhotoCarousel();
+}
+
+function updateEvaluationQrCode(mobileUrl) {
+    const qrContainer = document.getElementById('evaluationQrCode');
+    if (!qrContainer) return;
+
+    if (!mobileUrl) {
+        if (evaluationQrCodeInstance && typeof evaluationQrCodeInstance.clear === 'function') {
+            evaluationQrCodeInstance.clear();
+        }
+        qrContainer.innerHTML = '<div class="qr-placeholder">请选择小组</div>';
+        evaluationQrCodeInstance = null;
+        return;
+    }
+
+    if (typeof QRCode === 'undefined') {
+        qrContainer.innerHTML = '<div class="qr-placeholder">二维码加载失败</div>';
+        console.error('二维码库未正确加载');
+        evaluationQrCodeInstance = null;
+        return;
+    }
+
+    if (!evaluationQrCodeInstance) {
+        qrContainer.innerHTML = '';
+        evaluationQrCodeInstance = new QRCode(qrContainer, {
+            width: 180,
+            height: 180,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    }
+
+    if (typeof evaluationQrCodeInstance.clear === 'function') {
+        evaluationQrCodeInstance.clear();
+    }
+    evaluationQrCodeInstance.makeCode(mobileUrl);
 }
 
 // 更新投票统计

@@ -1503,14 +1503,67 @@ body {
 
 /* 操作区域样式 */
 .action-section {
-    text-align: center;
     margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
 }
 
-.action-section .btn {
-    font-size: 1.1rem;
-    padding: 15px 30px;
-    border-radius: 15px;
+.evaluation-qr-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+    border-radius: 18px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 20px 40px rgba(8, 15, 40, 0.35);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    max-width: 220px;
+}
+
+.evaluation-qr-wrapper:hover,
+.evaluation-qr-wrapper:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 24px 45px rgba(8, 15, 40, 0.45);
+    border-color: rgba(248, 250, 252, 0.45);
+    outline: none;
+}
+
+.evaluation-qr-wrapper:focus {
+    outline: none;
+}
+
+.evaluation-qr-code {
+    width: 180px;
+    height: 180px;
+    border-radius: 16px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+}
+
+.evaluation-qr-code canvas,
+.evaluation-qr-code img {
+    width: 100%;
+    height: 100%;
+}
+
+.qr-placeholder {
+    color: #64748b;
+    font-size: 0.95rem;
+}
+
+.qr-caption {
+    color: #B0C4DE;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
 }
 
 .share-text {
