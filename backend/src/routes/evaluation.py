@@ -10,6 +10,9 @@ from io import BytesIO
 from datetime import datetime
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from functools import wraps
+from urllib.parse import urljoin
+
+import qrcode
 
 evaluation_bp = Blueprint('evaluation', __name__)
 
@@ -105,6 +108,38 @@ def get_groups():
     """获取所有小组"""
     groups = Group.query.all()
     return jsonify([group.to_dict() for group in groups])
+
+@evaluation_bp.route('/groups/<int:group_id>/qrcode', methods=['GET'])
+def get_group_qrcode(group_id):
+    """生成指定小组的手机端访问二维码"""
+    Group.query.get_or_404(group_id)
+
+    requested_url = (request.args.get('url') or '').strip()
+    if requested_url:
+        target_url = requested_url
+    else:
+        mobile_path = f"m?g={group_id}"
+        target_url = urljoin(request.host_url, mobile_path)
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=2,
+    )
+    qr.add_data(target_url)
+    qr.make(fit=True)
+
+    qr_image = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    qr_image.save(buffer, format='PNG')
+    buffer.seek(0)
+
+    response = send_file(buffer, mimetype='image/png')
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @evaluation_bp.route('/groups', methods=['POST'])
 @admin_required
