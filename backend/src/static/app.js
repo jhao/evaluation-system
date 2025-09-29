@@ -123,6 +123,7 @@ function showAdminLoginModal() {
 
     if (passwordInput) {
         passwordInput.value = '';
+        passwordInput.classList.remove('has-value');
         passwordInput.focus();
     }
 
@@ -456,6 +457,7 @@ function setupEventListeners() {
     const adminLoginForm = document.getElementById('adminLoginForm');
     if (adminLoginForm) {
         adminLoginForm.addEventListener('submit', handleAdminLoginSubmit);
+        initializeAdminLoginInputStyles(adminLoginForm);
     }
 
     const adminLoginModal = document.getElementById('adminLoginModal');
@@ -479,6 +481,23 @@ function setupEventListeners() {
 
     // 后台管理按钮事件绑定
     setupAdminButtonEvents();
+}
+
+function initializeAdminLoginInputStyles(form) {
+    const loginInputs = form.querySelectorAll('input');
+    loginInputs.forEach((input) => {
+        const toggleValueClass = () => {
+            if (input.value && input.value.trim() !== '') {
+                input.classList.add('has-value');
+            } else {
+                input.classList.remove('has-value');
+            }
+        };
+
+        toggleValueClass();
+        input.addEventListener('input', toggleValueClass);
+        input.addEventListener('blur', toggleValueClass);
+    });
 }
 
 function prepareFullscreenTargetPage() {
