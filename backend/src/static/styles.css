@@ -1037,6 +1037,11 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    padding: 2rem;
+    border-radius: 18px;
+    background: linear-gradient(160deg, #0F2F5F 0%, #1B4A86 100%);
+    border: 1px solid #1F4C84;
+    box-shadow: 0 18px 35px rgba(0, 0, 0, 0.35);
 }
 
 .form-group {
