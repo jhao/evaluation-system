@@ -853,7 +853,7 @@ function updateGroupDisplay() {
         shareLinkElement.href = '#';
     }
 
-    updateEvaluationQrCode(mobileUrl);
+    updateEvaluationQrCode(currentGroup, mobileUrl);
 
     if (!currentGroup) return;
 
@@ -877,29 +877,40 @@ function updateGroupDisplay() {
     updatePhotoCarousel();
 }
 
-function updateEvaluationQrCode(mobileUrl) {
+function updateEvaluationQrCode(group, mobileUrl) {
     const qrContainer = document.getElementById('evaluationQrCode');
     if (!qrContainer) return;
 
-    if (!mobileUrl) {
+    if (!group) {
         qrContainer.innerHTML = '<div class="qr-placeholder">请选择小组</div>';
         return;
     }
 
-    if (typeof QRCode === 'undefined') {
+    const targetMobileUrl = mobileUrl || buildMobileEvaluationUrl(group.id);
+    const qrImageUrl = `${buildGroupQrCodeImageUrl(group.id)}?t=${Date.now()}`;
+
+    const qrImage = document.createElement('img');
+    qrImage.src = qrImageUrl;
+    qrImage.alt = `小组${group.name || ''}评价二维码`;
+    qrImage.loading = 'lazy';
+    qrImage.decoding = 'async';
+
+    qrImage.addEventListener('error', (error) => {
+        console.error('二维码加载失败', error);
         qrContainer.innerHTML = '<div class="qr-placeholder">二维码加载失败</div>';
-        console.error('二维码库未正确加载');
-        return;
-    }
+    });
+
+    qrImage.addEventListener('load', () => {
+        // 将二维码图片加载成功后，确保显示正确的移动端链接
+        const shareLinkElement = document.getElementById('evaluationShareLink');
+        if (shareLinkElement) {
+            shareLinkElement.textContent = targetMobileUrl;
+            shareLinkElement.href = targetMobileUrl;
+        }
+    });
 
     qrContainer.innerHTML = '';
-
-    try {
-        new QRCode(qrContainer, mobileUrl);
-    } catch (error) {
-        console.error('二维码生成失败', error);
-        qrContainer.innerHTML = '<div class="qr-placeholder">二维码生成失败</div>';
-    }
+    qrContainer.appendChild(qrImage);
 }
 
 // 更新投票统计
@@ -1083,6 +1094,10 @@ function showNextPhoto() {
 // 打开手机端评价页面
 function buildMobileEvaluationUrl(groupId) {
     return `${window.location.origin}/m?g=${groupId}`;
+}
+
+function buildGroupQrCodeImageUrl(groupId) {
+    return `${API_BASE}/groups/${groupId}/qrcode`;
 }
 
 function openMobilePage() {
