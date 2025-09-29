@@ -14,7 +14,7 @@ RUN set -eux; \
     MIRROR_HOST="${DEBIAN_MIRROR}"; \
     MIRROR_SCHEME="${DEBIAN_MIRROR_SCHEME}"; \
     if [ -n "${MIRROR_HOST}" ]; then \
-        cat > /etc/apt/sources.list <<EOF
+        cat <<'EOF' > /etc/apt/sources.list
 deb ${MIRROR_SCHEME}://${MIRROR_HOST}/debian ${VERSION_CODENAME} main
 deb ${MIRROR_SCHEME}://${MIRROR_HOST}/debian ${VERSION_CODENAME}-updates main
 deb ${MIRROR_SCHEME}://${MIRROR_HOST}/debian ${VERSION_CODENAME}-backports main
