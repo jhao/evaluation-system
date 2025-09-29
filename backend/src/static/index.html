@@ -57,7 +57,12 @@
                         </div>
 
                         <div class="action-section">
-                            <button id="openMobileBtn" class="btn btn-primary">进入评价页面</button>
+                            <div id="evaluationQrWrapper" class="evaluation-qr-wrapper" role="button" tabindex="0" aria-label="进入评价页面">
+                                <div id="evaluationQrCode" class="evaluation-qr-code">
+                                    <div class="qr-placeholder">请选择小组</div>
+                                </div>
+                                <p class="qr-caption">扫码或点击进入评价页面</p>
+                            </div>
                             <p class="share-text">复制链接访问评价页：<a id="evaluationShareLink" class="share-link" href="#" target="_blank" rel="noopener">请选择小组</a></p>
                         </div>
                     </div>
@@ -240,6 +245,7 @@
     <!-- 隐藏的文件上传input -->
     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
 
+    <script src="qrcode.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
