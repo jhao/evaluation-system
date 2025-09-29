@@ -9,7 +9,6 @@ let photoCarouselInterval;
 let currentPhotoSlide = 0;
 let manualFullscreen = false;
 let fullscreenTargetPageId = null;
-let evaluationQrCodeInstance = null;
 
 const ADMIN_TOKEN_STORAGE_KEY = 'evaluationAdminToken';
 let adminToken = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
@@ -883,36 +882,24 @@ function updateEvaluationQrCode(mobileUrl) {
     if (!qrContainer) return;
 
     if (!mobileUrl) {
-        if (evaluationQrCodeInstance && typeof evaluationQrCodeInstance.clear === 'function') {
-            evaluationQrCodeInstance.clear();
-        }
         qrContainer.innerHTML = '<div class="qr-placeholder">请选择小组</div>';
-        evaluationQrCodeInstance = null;
         return;
     }
 
     if (typeof QRCode === 'undefined') {
         qrContainer.innerHTML = '<div class="qr-placeholder">二维码加载失败</div>';
         console.error('二维码库未正确加载');
-        evaluationQrCodeInstance = null;
         return;
     }
 
-    if (!evaluationQrCodeInstance) {
-        qrContainer.innerHTML = '';
-        evaluationQrCodeInstance = new QRCode(qrContainer, {
-            width: 180,
-            height: 180,
-            colorDark: '#0f172a',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
-    }
+    qrContainer.innerHTML = '';
 
-    if (typeof evaluationQrCodeInstance.clear === 'function') {
-        evaluationQrCodeInstance.clear();
+    try {
+        new QRCode(qrContainer, mobileUrl);
+    } catch (error) {
+        console.error('二维码生成失败', error);
+        qrContainer.innerHTML = '<div class="qr-placeholder">二维码生成失败</div>';
     }
-    evaluationQrCodeInstance.makeCode(mobileUrl);
 }
 
 // 更新投票统计
