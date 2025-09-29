@@ -3,6 +3,15 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+ARG DEBIAN_MIRROR=mirrors.aliyun.com
+ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 替换 apt 源到国内镜像
+RUN sed -i "s@deb.debian.org@${DEBIAN_MIRROR}@g; s@security.debian.org@${DEBIAN_MIRROR}@g" /etc/apt/sources.list \
+ && apt-get -o Acquire::Retries=3 update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt
