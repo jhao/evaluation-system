@@ -12,7 +12,10 @@
         <!-- 导航栏 -->
         <nav class="navbar">
             <div class="nav-container">
-                <h1 class="nav-title">小组评价系统</h1>
+                <h1 class="nav-title">
+                    <span id="navCourseName" class="nav-course-name">未设置课程</span>
+                    <span class="nav-system-name">小组评价系统</span>
+                </h1>
                 <div class="nav-buttons">
                     <button id="adminBtn" class="nav-btn">后台管理</button>
                     <button id="adminLogoutBtn" class="nav-btn nav-btn-secondary hidden" type="button">退出登录</button>
@@ -86,12 +89,32 @@
         <!-- 后台管理页面 -->
         <div id="adminPage" class="page">
             <div class="admin-container">
+                <div class="admin-course-bar">
+                    <div class="course-select-group">
+                        <label for="adminCourseSelector">管理课程</label>
+                        <select id="adminCourseSelector" class="course-select"></select>
+                    </div>
+                    <button id="adminActivateCourseBtn" class="btn btn-secondary">设为大屏课程</button>
+                </div>
+
                 <div class="admin-tabs">
+                    <button class="admin-tab" data-tab="courses">课程管理</button>
                     <button class="admin-tab active" data-tab="groups">小组管理</button>
                     <button class="admin-tab" data-tab="voters">评价人管理</button>
                     <button class="admin-tab" data-tab="roles">职务管理</button>
                     <button class="admin-tab" data-tab="votes">投票数据</button>
                     <button class="admin-tab" data-tab="init">初始化数据</button>
+                </div>
+
+                <!-- 课程管理 -->
+                <div id="coursesTab" class="admin-content">
+                    <div class="admin-header">
+                        <h3>课程管理</h3>
+                        <div class="admin-actions">
+                            <button id="addCourseBtn" class="btn btn-primary">新建课程</button>
+                        </div>
+                    </div>
+                    <div id="coursesList" class="admin-list"></div>
                 </div>
 
                 <!-- 小组管理 -->
@@ -153,6 +176,7 @@
         <!-- 排名页面 -->
         <div id="rankingPage" class="page">
             <div class="ranking-container">
+                <div id="rankingCourseBadge" class="course-badge">未设置课程</div>
                 <h2 class="ranking-title">最终排名</h2>
                 <div id="rankingDisplay" class="ranking-display"></div>
             </div>

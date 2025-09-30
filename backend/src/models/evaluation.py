@@ -4,17 +4,44 @@ import json
 
 db = SQLAlchemy()
 
+
+class Course(db.Model):
+    """课程表，隔离不同课程的数据"""
+    __tablename__ = 'courses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    groups = db.relationship('Group', backref='course', lazy=True, cascade='all, delete-orphan')
+    roles = db.relationship('Role', backref='course', lazy=True, cascade='all, delete-orphan')
+    voters = db.relationship('Voter', backref='course', lazy=True, cascade='all, delete-orphan')
+    votes = db.relationship('Vote', backref='course', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class Group(db.Model):
     """小组表"""
     __tablename__ = 'groups'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     logo = db.Column(db.String(255))  # logo图片路径
     status = db.Column(db.Integer, default=0)  # 0=进行中, 1=已锁定
     photos = db.Column(db.Text)  # JSON格式存储照片路径列表
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # 关联关系
     members = db.relationship('Member', backref='group', lazy=True, cascade='all, delete-orphan')
     votes = db.relationship('Vote', backref='group', lazy=True, cascade='all, delete-orphan')
@@ -46,6 +73,7 @@ class Group(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'course_id': self.course_id,
             'name': self.name,
             'logo': self.logo,
             'status': self.status,
@@ -57,17 +85,23 @@ class Group(db.Model):
 class Role(db.Model):
     """职务表"""
     __tablename__ = 'roles'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    name = db.Column(db.String(50), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # 关联关系
     members = db.relationship('Member', backref='role', lazy=True)
-    
+
+    __table_args__ = (
+        db.UniqueConstraint('course_id', 'name', name='uq_role_course_name'),
+    )
+
     def to_dict(self):
         return {
             'id': self.id,
+            'course_id': self.course_id,
             'name': self.name,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
@@ -75,7 +109,7 @@ class Role(db.Model):
 class Member(db.Model):
     """小组成员表"""
     __tablename__ = 'members'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
@@ -87,6 +121,7 @@ class Member(db.Model):
         return {
             'id': self.id,
             'group_id': self.group_id,
+            'course_id': self.group.course_id if self.group else None,
             'name': self.name,
             'company': self.company,
             'role_id': self.role_id,
@@ -97,23 +132,29 @@ class Member(db.Model):
 class Voter(db.Model):
     """评价人表"""
     __tablename__ = 'voters'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
-    phone = db.Column(db.String(20), nullable=False, unique=True)
+    phone = db.Column(db.String(20), nullable=False)
     weight = db.Column(db.Integer, default=1)  # 评价权重
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # 关联关系
     votes = db.relationship('Vote', backref='voter', lazy=True)
-    
+
+    __table_args__ = (
+        db.UniqueConstraint('course_id', 'phone', name='uq_voter_course_phone'),
+    )
+
     def has_voted_for_group(self, group_id):
         """检查是否已为某个小组投过票"""
         return Vote.query.filter_by(voter_id=self.id, group_id=group_id).first() is not None
-    
+
     def to_dict(self):
         return {
             'id': self.id,
+            'course_id': self.course_id,
             'name': self.name,
             'phone': self.phone,
             'weight': self.weight,
@@ -123,8 +164,9 @@ class Voter(db.Model):
 class Vote(db.Model):
     """评价记录表"""
     __tablename__ = 'votes'
-    
+
     id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
     voter_id = db.Column(db.Integer, db.ForeignKey('voters.id'), nullable=False)
     vote_type = db.Column(db.Integer, nullable=False)  # 1=赞, -1=踩
@@ -137,6 +179,7 @@ class Vote(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'course_id': self.course_id,
             'group_id': self.group_id,
             'voter_id': self.voter_id,
             'voter_name': self.voter.name if self.voter else None,
