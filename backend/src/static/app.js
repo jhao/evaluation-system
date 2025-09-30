@@ -3,12 +3,21 @@ let socket;
 let currentGroup = null;
 let groups = [];
 let roles = [];
+let rolesCourseId = null;
+let adminGroups = [];
+let adminGroupsCourseId = null;
 let voters = [];
 let currentVoter = null;
 let photoCarouselInterval;
 let currentPhotoSlide = 0;
 let manualFullscreen = false;
 let fullscreenTargetPageId = null;
+
+let courses = [];
+let currentCourseId = null;
+let currentCourse = null;
+let activeCourseId = null;
+let activeCourse = null;
 
 const ADMIN_TOKEN_STORAGE_KEY = 'evaluationAdminToken';
 let adminToken = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
@@ -110,6 +119,137 @@ function ensureAdminAuthenticated() {
     }
     showAdminLoginModal();
     return false;
+}
+
+function getActiveCourseId() {
+    return activeCourseId;
+}
+
+function getCurrentCourseId() {
+    return currentCourseId || activeCourseId;
+}
+
+function findCourseById(id) {
+    if (!id) return null;
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    return courses.find(course => course.id === numericId) || null;
+}
+
+function setActiveCourseData(course) {
+    activeCourse = course || null;
+    activeCourseId = course ? course.id : null;
+    updateCourseDisplays();
+}
+
+function setCurrentCourseData(course) {
+    currentCourse = course || null;
+    currentCourseId = course ? course.id : null;
+    updateCourseDisplays();
+    updateAdminCourseSelector();
+}
+
+function buildCourseUrl(path, courseId) {
+    const targetId = courseId ?? getCurrentCourseId();
+    if (!targetId) {
+        return path;
+    }
+
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}course_id=${encodeURIComponent(targetId)}`;
+}
+
+function buildActiveCourseUrl(path) {
+    const activeId = getActiveCourseId();
+    if (!activeId) {
+        return path;
+    }
+    return buildCourseUrl(path, activeId);
+}
+
+function withCourseId(payload, courseId) {
+    const targetId = courseId ?? getCurrentCourseId();
+    if (!targetId) {
+        return { ...payload };
+    }
+    return { ...payload, course_id: targetId };
+}
+
+function appendCourseIdToFormData(formData, courseId) {
+    const targetId = courseId ?? getCurrentCourseId();
+    if (!targetId) {
+        return formData;
+    }
+    if (!formData.has('course_id')) {
+        formData.append('course_id', targetId);
+    }
+    return formData;
+}
+
+function updateCourseDisplays() {
+    const courseName = (activeCourse && activeCourse.name) || '未设置课程';
+
+    const navCourseEl = document.getElementById('navCourseName');
+    if (navCourseEl) {
+        navCourseEl.textContent = courseName;
+    }
+
+    const rankingCourseEl = document.getElementById('rankingCourseBadge');
+    if (rankingCourseEl) {
+        rankingCourseEl.textContent = courseName;
+    }
+
+    if (courseName) {
+        document.title = `${courseName} - 小组评价系统`;
+    } else {
+        document.title = '小组评价系统';
+    }
+}
+
+function updateAdminCourseSelector() {
+    const selector = document.getElementById('adminCourseSelector');
+    if (!selector) {
+        return;
+    }
+
+    selector.innerHTML = '';
+
+    if (!courses.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '暂无课程';
+        selector.appendChild(option);
+        selector.disabled = true;
+        const activateBtn = document.getElementById('adminActivateCourseBtn');
+        if (activateBtn) {
+            activateBtn.disabled = true;
+            activateBtn.textContent = '设为大屏课程';
+        }
+        return;
+    }
+
+    selector.disabled = false;
+
+    courses.forEach(course => {
+        const option = document.createElement('option');
+        option.value = String(course.id);
+        option.textContent = course.name + (course.is_active ? '（大屏展示）' : '');
+        selector.appendChild(option);
+    });
+
+    const targetId = getCurrentCourseId();
+    if (targetId) {
+        selector.value = String(targetId);
+    } else {
+        selector.selectedIndex = 0;
+    }
+
+    const activateBtn = document.getElementById('adminActivateCourseBtn');
+    if (activateBtn) {
+        const selectedId = selector.value;
+        const isActiveCourse = activeCourseId && selectedId === String(activeCourseId);
+        activateBtn.disabled = !selectedId || isActiveCourse;
+        activateBtn.textContent = isActiveCourse ? '当前为大屏课程' : '设为大屏课程';
+    }
 }
 
 function showAdminLoginModal() {
@@ -479,6 +619,16 @@ function setupEventListeners() {
         adminLoginCancelBtn.addEventListener('click', hideAdminLoginModal);
     }
 
+    const adminCourseSelector = document.getElementById('adminCourseSelector');
+    if (adminCourseSelector) {
+        adminCourseSelector.addEventListener('change', handleAdminCourseChange);
+    }
+
+    const adminActivateCourseBtn = document.getElementById('adminActivateCourseBtn');
+    if (adminActivateCourseBtn) {
+        adminActivateCourseBtn.addEventListener('click', handleAdminActivateCourse);
+    }
+
     // 后台管理按钮事件绑定
     setupAdminButtonEvents();
 }
@@ -634,6 +784,11 @@ function updateDisplayScale() {
 
 // 设置后台管理按钮事件
 function setupAdminButtonEvents() {
+    const addCourseBtn = document.getElementById('addCourseBtn');
+    if (addCourseBtn) {
+        addCourseBtn.addEventListener('click', showAddCourseModal);
+    }
+
     // 添加小组按钮
     const addGroupBtn = document.getElementById('addGroupBtn');
     if (addGroupBtn) {
@@ -671,16 +826,49 @@ function setupAdminButtonEvents() {
     }
 }
 
+async function loadCourses() {
+    try {
+        const data = await apiCall('/courses');
+        courses = Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error('加载课程失败:', error);
+        courses = [];
+    }
+
+    if (!courses.length) {
+        setActiveCourseData(null);
+        setCurrentCourseData(null);
+        renderAdminCoursesList();
+        return courses;
+    }
+
+    const active = courses.find(course => course.is_active) || courses[0];
+    setActiveCourseData(active);
+
+    const desiredCurrentId = currentCourseId;
+    const current = desiredCurrentId ? findCourseById(desiredCurrentId) : null;
+    setCurrentCourseData(current || active);
+
+    renderAdminCoursesList();
+
+    return courses;
+}
+
 // 加载初始数据
 async function loadInitialData() {
     try {
-        const initialTasks = [
-            loadGroups(),
-            loadRoles()
-        ];
+        await loadCourses();
+
+        const displayCourseId = getActiveCourseId();
+        const managementCourseId = getCurrentCourseId();
+
+        const initialTasks = [];
+
+        initialTasks.push(loadGroups(displayCourseId));
+        initialTasks.push(loadRoles(managementCourseId));
 
         if (getAdminToken()) {
-            initialTasks.push(loadVoters({ silent: true }));
+            initialTasks.push(loadVoters({ silent: true, courseId: managementCourseId }));
         } else {
             voters = [];
         }
@@ -700,7 +888,7 @@ async function loadDisplayData() {
     const previousGroupId = currentGroup ? currentGroup.id : null;
 
     try {
-        await loadGroups();
+        await loadGroups(getActiveCourseId());
 
         if (groups.length === 0) {
             currentGroup = null;
@@ -787,20 +975,30 @@ async function apiCall(url, options = {}) {
 }
 
 // 加载小组数据
-async function loadGroups() {
-    groups = await apiCall('/groups');
-    renderGroupTabs();
+async function loadGroups(courseId, options = {}) {
+    const targetCourseId = courseId ?? getCurrentCourseId() ?? getActiveCourseId();
+    const url = buildCourseUrl('/groups', targetCourseId);
+    groups = await apiCall(url);
+    if (!options.skipRenderTabs) {
+        renderGroupTabs();
+    }
+    return groups;
 }
 
 // 加载职务数据
-async function loadRoles() {
-    roles = await apiCall('/roles');
+async function loadRoles(courseId) {
+    const targetCourseId = courseId ?? getCurrentCourseId();
+    const url = buildCourseUrl('/roles', targetCourseId);
+    roles = await apiCall(url);
+    rolesCourseId = targetCourseId;
+    return roles;
 }
 
 // 加载评价人数据
 async function loadVoters(options = {}) {
     try {
-        voters = await apiCall('/voters');
+        const url = buildCourseUrl('/voters', options.courseId);
+        voters = await apiCall(url);
         return voters;
     } catch (error) {
         if (error.status === 401) {
@@ -1228,7 +1426,10 @@ async function submitVote(voteType) {
 }
 
 // 后台管理相关函数
-async function loadAdminData() {
+async function loadAdminData(options = {}) {
+    if (!options.skipCourses) {
+        await loadCourses();
+    }
     await Promise.all([
         loadAdminGroups(),
         loadAdminVoters(),
@@ -1253,9 +1454,11 @@ function switchAdminTab(tabName) {
 // 加载后台小组管理
 async function loadAdminGroups() {
     try {
-        const groups = await apiCall('/groups');
-        renderAdminGroups(groups);
-        updateVoteGroupFilter(groups);
+        const result = await apiCall(buildCourseUrl('/groups', getCurrentCourseId()));
+        adminGroups = Array.isArray(result) ? result : [];
+        adminGroupsCourseId = getCurrentCourseId();
+        renderAdminGroups(adminGroups);
+        updateVoteGroupFilter(adminGroups);
     } catch (error) {
         console.error('加载小组失败:', error);
     }
@@ -1310,7 +1513,7 @@ function updateVoteGroupFilter(groups) {
 // 加载后台评价人管理
 async function loadAdminVoters() {
     try {
-        const voters = await apiCall('/voters');
+        const voters = await apiCall(buildCourseUrl('/voters', getCurrentCourseId()));
         renderAdminVoters(voters);
     } catch (error) {
         console.error('加载评价人失败:', error);
@@ -1345,7 +1548,9 @@ function renderAdminVoters(voters) {
 // 加载后台职务管理
 async function loadAdminRoles() {
     try {
-        const roles = await apiCall('/roles');
+        const result = await apiCall(buildCourseUrl('/roles', getCurrentCourseId()));
+        roles = Array.isArray(result) ? result : [];
+        rolesCourseId = getCurrentCourseId();
         renderAdminRoles(roles);
     } catch (error) {
         console.error('加载职务失败:', error);
@@ -1355,9 +1560,9 @@ async function loadAdminRoles() {
 function renderAdminRoles(roles) {
     const rolesList = document.getElementById('rolesList');
     if (!rolesList) return;
-    
+
     rolesList.innerHTML = '';
-    
+
     roles.forEach(role => {
         const item = document.createElement('div');
         item.className = 'admin-item';
@@ -1373,10 +1578,236 @@ function renderAdminRoles(roles) {
     });
 }
 
+// 课程管理
+function renderAdminCoursesList() {
+    const coursesList = document.getElementById('coursesList');
+    if (!coursesList) return;
+
+    coursesList.innerHTML = '';
+
+    if (!courses.length) {
+        coursesList.innerHTML = '<p style="text-align: center; color: #B0C4DE;">暂无课程，请先创建课程</p>';
+        return;
+    }
+
+    courses.forEach(course => {
+        const item = document.createElement('div');
+        item.className = 'admin-item';
+
+        const createdAt = course.created_at ? new Date(course.created_at).toLocaleString() : '未知时间';
+        const escapedName = escapeHtml(course.name || '');
+        const descriptionHtml = course.description
+            ? `<div class="admin-item-details">${escapeHtml(course.description)}</div>`
+            : '';
+        const statusBadge = course.is_active ? '<span class="admin-status-badge">大屏展示中</span>' : '';
+
+        item.innerHTML = `
+            <div class="admin-item-info">
+                <div class="admin-item-title">${escapedName}${statusBadge}</div>
+                <div class="admin-item-details">创建时间: ${createdAt}</div>
+                ${descriptionHtml}
+            </div>
+            <div class="admin-item-actions">
+                <button class="btn btn-secondary" onclick="setManagementCourse(${course.id})">管理数据</button>
+                ${course.is_active ? '' : `<button class="btn btn-info" onclick="activateCourseFromList(${course.id})">设为大屏</button>`}
+                <button class="btn btn-secondary" onclick="showEditCourseModal(${course.id})">编辑</button>
+                <button class="btn btn-danger" onclick="deleteCourse(${course.id})">删除</button>
+            </div>
+        `;
+
+        coursesList.appendChild(item);
+    });
+}
+
+async function setManagementCourse(courseId, options = {}) {
+    const course = findCourseById(courseId);
+    if (!course) {
+        if (options.notify !== false) {
+            showMessage('课程不存在', 'error');
+        }
+        return;
+    }
+
+    setCurrentCourseData(course);
+    await loadAdminData({ skipCourses: true });
+
+    if (options.notify !== false) {
+        showMessage(`已切换到「${course.name}」课程`, 'success');
+    }
+}
+
+async function handleAdminCourseChange(event) {
+    const selectedId = parseInt(event.target.value, 10);
+    if (!selectedId) {
+        return;
+    }
+    await setManagementCourse(selectedId, { notify: false });
+}
+
+async function activateCourseRequest(courseId) {
+    if (!courseId) {
+        showMessage('请选择课程', 'error');
+        return;
+    }
+
+    try {
+        await apiCall(`/courses/${courseId}/activate`, { method: 'POST' });
+        currentCourseId = courseId;
+        await loadCourses();
+        await loadAdminData({ skipCourses: true });
+        await Promise.all([loadDisplayData(), loadRankingData()]);
+        const course = findCourseById(courseId);
+        showMessage(`已切换「${course ? course.name : '所选'}」为大屏课程`, 'success');
+    } catch (error) {
+        showMessage('切换课程失败: ' + error.message, 'error');
+    }
+}
+
+function activateCourseFromList(courseId) {
+    activateCourseRequest(courseId);
+}
+
+async function handleAdminActivateCourse(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    const selector = document.getElementById('adminCourseSelector');
+    if (!selector) return;
+
+    const selectedId = parseInt(selector.value, 10);
+    if (!selectedId) {
+        showMessage('请选择课程', 'error');
+        return;
+    }
+    await activateCourseRequest(selectedId);
+}
+
+function showAddCourseModal() {
+    const content = `
+        <h3>新建课程</h3>
+        <form id="addCourseForm">
+            <div class="form-group">
+                <label for="courseName">课程名称</label>
+                <input type="text" id="courseName" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="courseDescription">课程简介（可选）</label>
+                <textarea id="courseDescription" name="description" rows="3" placeholder="请输入课程简介"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit">保存</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+
+    const form = document.getElementById('addCourseForm');
+    if (form) {
+        form.addEventListener('submit', handleAddCourse);
+    }
+}
+
+async function handleAddCourse(event) {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+
+    try {
+        const course = await apiCall('/courses', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+
+        currentCourseId = course.id;
+        await loadCourses();
+        await loadAdminData({ skipCourses: true });
+
+        closeModal();
+        showMessage('课程创建成功', 'success');
+    } catch (error) {
+        showMessage('创建课程失败: ' + error.message, 'error');
+    }
+}
+
+function showEditCourseModal(courseId) {
+    const course = findCourseById(courseId);
+    if (!course) {
+        showMessage('课程不存在', 'error');
+        return;
+    }
+
+    const content = `
+        <h3>编辑课程</h3>
+        <form id="editCourseForm">
+            <div class="form-group">
+                <label for="editCourseName">课程名称</label>
+                <input type="text" id="editCourseName" name="name" value="${course.name}" required>
+            </div>
+            <div class="form-group">
+                <label for="editCourseDescription">课程简介（可选）</label>
+                <textarea id="editCourseDescription" name="description" rows="3">${course.description || ''}</textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit">保存</button>
+                <button type="button" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    `;
+    showModal(content);
+
+    const form = document.getElementById('editCourseForm');
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            handleEditCourse(courseId, event);
+        });
+    }
+}
+
+async function handleEditCourse(courseId, event) {
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+
+    try {
+        await apiCall(`/courses/${courseId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+
+        await loadCourses();
+        await loadAdminData({ skipCourses: true });
+
+        closeModal();
+        showMessage('课程更新成功', 'success');
+    } catch (error) {
+        showMessage('更新课程失败: ' + error.message, 'error');
+    }
+}
+
+async function deleteCourse(courseId) {
+    const course = findCourseById(courseId);
+    const courseName = course ? course.name : '该课程';
+
+    if (!confirm(`确定要删除「${courseName}」吗？此操作无法撤销。`)) {
+        return;
+    }
+
+    try {
+        await apiCall(`/courses/${courseId}`, { method: 'DELETE' });
+        await loadCourses();
+        await loadAdminData({ skipCourses: true });
+        showMessage('课程已删除', 'success');
+    } catch (error) {
+        showMessage('删除课程失败: ' + error.message, 'error');
+    }
+}
+
 // 排名相关函数
 async function loadRankingData() {
     try {
-        const ranking = await apiCall('/ranking');
+        const ranking = await apiCall(buildActiveCourseUrl('/ranking'));
         renderRanking(ranking);
     } catch (error) {
         console.error('加载排名失败:', error);
@@ -1584,7 +2015,7 @@ function initializeLogoUpload({
 
 // 编辑小组
 function editGroup(groupId) {
-    const group = groups.find(g => g.id === groupId);
+    const group = adminGroups.find(g => g.id === groupId);
     if (!group) return;
     
     const content = `
@@ -1624,17 +2055,20 @@ function editGroup(groupId) {
 
         const formData = new FormData(event.target);
         const data = Object.fromEntries(formData);
-        
+        const payload = withCourseId(data, group.course_id);
+
         try {
             await apiCall(`/groups/${groupId}`, {
                 method: 'PUT',
-                body: JSON.stringify(data)
+                body: JSON.stringify(payload)
             });
-            
+
             showMessage('小组更新成功', 'success');
             closeModal();
-            loadAdminGroups();
-            loadGroups();
+            await loadAdminGroups();
+            if (getActiveCourseId() === group.course_id) {
+                await loadGroups(getActiveCourseId());
+            }
         } catch (error) {
             showMessage('更新失败: ' + error.message, 'error');
         }
@@ -1644,14 +2078,15 @@ function editGroup(groupId) {
 // 管理小组成员
 async function manageGroupMembers(groupId) {
     try {
+        const group = adminGroups.find(g => g.id === groupId);
+        const courseId = group ? group.course_id : getCurrentCourseId();
         const [members, roleList] = await Promise.all([
             apiCall(`/groups/${groupId}/members`),
-            apiCall('/roles')
+            apiCall(buildCourseUrl('/roles', courseId))
         ]);
 
         roles = roleList;
 
-        const group = groups.find(g => g.id === groupId);
         const groupName = group ? group.name : '未知小组';
 
         const content = `
@@ -1714,14 +2149,16 @@ function escapeHtml(text) {
         .replace(/>/g, '&gt;');
 }
 
-async function ensureRolesLoaded() {
-    if (!roles || roles.length === 0) {
-        roles = await apiCall('/roles');
+async function ensureRolesLoaded(courseId) {
+    const targetCourseId = courseId ?? getCurrentCourseId();
+    if (!roles || roles.length === 0 || rolesCourseId !== targetCourseId) {
+        await loadRoles(targetCourseId);
     }
 }
 
 async function showBulkAddMembersModal(groupId) {
-    await ensureRolesLoaded();
+    const group = adminGroups.find(g => g.id === groupId);
+    await ensureRolesLoaded(group ? group.course_id : undefined);
     const roleNames = roles.length > 0 ? roles.map(role => role.name).join('、') : '暂无职务，请先在职务管理中添加';
 
     const content = `
@@ -1753,7 +2190,8 @@ async function showBulkAddMembersModal(groupId) {
 
 async function showBulkEditMembersModal(groupId) {
     try {
-        await ensureRolesLoaded();
+        const group = adminGroups.find(g => g.id === groupId);
+        await ensureRolesLoaded(group ? group.course_id : undefined);
         const members = await apiCall(`/groups/${groupId}/members`);
         const roleNames = roles.length > 0 ? roles.map(role => role.name).join('、') : '暂无职务，请先在职务管理中添加';
         const defaultText = members.map(formatMemberLine).join('\n');
@@ -1796,9 +2234,12 @@ async function submitBulkMembers(groupId, entries, replace = false) {
     }
 
     try {
+        const group = adminGroups.find(g => g.id === groupId);
+        const courseId = group ? group.course_id : getCurrentCourseId();
+        const payload = withCourseId({ entries }, courseId);
         const result = await apiCall(`/groups/${groupId}/members/bulk`, {
             method: replace ? 'PUT' : 'POST',
-            body: JSON.stringify({ entries })
+            body: JSON.stringify(payload)
         });
 
         showMessage(result.message || '操作成功', 'success');
@@ -1807,7 +2248,7 @@ async function submitBulkMembers(groupId, entries, replace = false) {
         if (currentGroup && currentGroup.id === groupId) {
             await loadDisplayData();
         }
-        await loadRoles();
+        await loadRoles(courseId);
     } catch (error) {
         showMessage(error.message, 'error');
     }
@@ -1816,7 +2257,9 @@ async function submitBulkMembers(groupId, entries, replace = false) {
 // 显示添加成员模态框
 async function showAddMemberModal(groupId) {
     try {
-        const roles = await apiCall('/roles');
+        const group = adminGroups.find(g => g.id === groupId);
+        const courseId = group ? group.course_id : getCurrentCourseId();
+        const roles = await apiCall(buildCourseUrl('/roles', courseId));
 
         const content = `
             <h3>添加小组成员</h3>
@@ -1846,17 +2289,18 @@ async function showAddMemberModal(groupId) {
         
         document.getElementById('addMemberForm').addEventListener('submit', async function(event) {
             event.preventDefault();
-            
+
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData);
             data.role_id = parseInt(data.role_id);
-            
+            const payload = withCourseId(data, courseId);
+
             try {
                 await apiCall(`/groups/${groupId}/members`, {
                     method: 'POST',
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(payload)
                 });
-                
+
                 showMessage('成员添加成功', 'success');
                 closeModal();
                 manageGroupMembers(groupId); // 刷新成员列表
@@ -1874,7 +2318,7 @@ async function showAddMemberModal(groupId) {
 async function manageGroupPhotos(groupId) {
     try {
         const photos = await apiCall(`/groups/${groupId}/photos`);
-        const group = groups.find(g => g.id === groupId);
+        const group = adminGroups.find(g => g.id === groupId);
         const groupName = group ? group.name : '未知小组';
 
         const content = `
@@ -2094,21 +2538,22 @@ function editVoter(voterId) {
     
     document.getElementById('editVoterForm').addEventListener('submit', async function(event) {
         event.preventDefault();
-        
+
         const formData = new FormData(event.target);
         const data = Object.fromEntries(formData);
         data.weight = parseInt(data.weight);
-        
+        const payload = withCourseId(data, getCurrentCourseId());
+
         try {
             await apiCall(`/voters/${voterId}`, {
                 method: 'PUT',
-                body: JSON.stringify(data)
+                body: JSON.stringify(payload)
             });
-            
+
             showMessage('评价人更新成功', 'success');
             closeModal();
             loadAdminVoters();
-            loadVoters();
+            loadVoters({ courseId: getCurrentCourseId() });
         } catch (error) {
             showMessage('更新失败: ' + error.message, 'error');
         }
@@ -2118,14 +2563,20 @@ function editVoter(voterId) {
 // 后台管理操作函数
 async function toggleGroupLock(groupId, lock) {
     try {
+        const group = adminGroups.find(g => g.id === groupId);
+        const courseId = group ? group.course_id : getCurrentCourseId();
+        const payload = withCourseId({ lock: lock }, courseId);
+
         await apiCall(`/groups/${groupId}/lock`, {
             method: 'POST',
-            body: JSON.stringify({ lock: lock })
+            body: JSON.stringify(payload)
         });
-        
+
         showMessage(lock ? '小组已锁定' : '小组已解锁', 'success');
-        loadAdminGroups();
-        loadGroups(); // 刷新主页面数据
+        await loadAdminGroups();
+        if (group && getActiveCourseId() === group.course_id) {
+            await loadGroups(getActiveCourseId());
+        }
     } catch (error) {
         showMessage('操作失败: ' + error.message, 'error');
     }
@@ -2133,12 +2584,16 @@ async function toggleGroupLock(groupId, lock) {
 
 async function deleteGroup(groupId) {
     if (!confirm('确定要删除这个小组吗？')) return;
-    
+
     try {
-        await apiCall(`/groups/${groupId}`, { method: 'DELETE' });
+        const group = adminGroups.find(g => g.id === groupId);
+        const courseId = group ? group.course_id : getCurrentCourseId();
+        await apiCall(`/groups/${groupId}?course_id=${courseId}`, { method: 'DELETE' });
         showMessage('小组已删除', 'success');
-        loadAdminGroups();
-        loadGroups();
+        await loadAdminGroups();
+        if (group && getActiveCourseId() === group.course_id) {
+            await loadGroups(getActiveCourseId());
+        }
     } catch (error) {
         showMessage('删除失败: ' + error.message, 'error');
     }
@@ -2146,12 +2601,12 @@ async function deleteGroup(groupId) {
 
 async function deleteVoter(voterId) {
     if (!confirm('确定要删除这个评价人吗？')) return;
-    
+
     try {
         await apiCall(`/voters/${voterId}`, { method: 'DELETE' });
         showMessage('评价人已删除', 'success');
-        loadAdminVoters();
-        loadVoters();
+        await loadAdminVoters();
+        await loadVoters({ courseId: getCurrentCourseId() });
     } catch (error) {
         showMessage('删除失败: ' + error.message, 'error');
     }
@@ -2159,12 +2614,12 @@ async function deleteVoter(voterId) {
 
 async function deleteRole(roleId) {
     if (!confirm('确定要删除这个职务吗？')) return;
-    
+
     try {
         await apiCall(`/roles/${roleId}`, { method: 'DELETE' });
         showMessage('职务已删除', 'success');
-        loadAdminRoles();
-        loadRoles();
+        await loadAdminRoles();
+        await loadRoles(getCurrentCourseId());
     } catch (error) {
         showMessage('删除失败: ' + error.message, 'error');
     }
@@ -2173,10 +2628,14 @@ async function deleteRole(roleId) {
 // 初始化数据
 async function initializeData() {
     try {
-        await apiCall('/init-data', { method: 'POST' });
+        const payload = withCourseId({}, getCurrentCourseId());
+        await apiCall('/init-data', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
         showMessage('初始化数据成功', 'success');
-        loadInitialData();
-        loadAdminData();
+        await loadInitialData();
+        await loadAdminData();
     } catch (error) {
         showMessage('初始化失败: ' + error.message, 'error');
     }
@@ -2187,10 +2646,15 @@ async function loadVotesData() {
     try {
         const groupFilter = document.getElementById('voteGroupFilter');
         const groupId = groupFilter ? groupFilter.value : '';
-        
-        const url = groupId ? `/votes?group_id=${groupId}` : '/votes';
+
+        let url = '/votes';
+        if (groupId) {
+            url += `?group_id=${groupId}`;
+        }
+        url = buildCourseUrl(url, getCurrentCourseId());
+
         const votes = await apiCall(url);
-        
+
         renderVotesData(votes);
     } catch (error) {
         console.error('加载投票数据失败:', error);
@@ -2412,20 +2876,23 @@ function closeModal() {
 // 处理添加小组
 async function handleAddGroup(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const data = Object.fromEntries(formData);
-    
+    const payload = withCourseId(data, getCurrentCourseId());
+
     try {
         await apiCall('/groups', {
             method: 'POST',
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
-        
+
         showMessage('小组添加成功', 'success');
         closeModal();
-        loadAdminGroups();
-        loadGroups();
+        await loadAdminGroups();
+        if (getActiveCourseId() === getCurrentCourseId()) {
+            await loadGroups(getActiveCourseId());
+        }
     } catch (error) {
         showMessage('添加失败: ' + error.message, 'error');
     }
@@ -2434,21 +2901,22 @@ async function handleAddGroup(event) {
 // 处理添加评价人
 async function handleAddVoter(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const data = Object.fromEntries(formData);
     data.weight = parseInt(data.weight);
-    
+    const payload = withCourseId(data, getCurrentCourseId());
+
     try {
         await apiCall('/voters', {
             method: 'POST',
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
-        
+
         showMessage('评价人添加成功', 'success');
         closeModal();
-        loadAdminVoters();
-        loadVoters();
+        await loadAdminVoters();
+        await loadVoters({ courseId: getCurrentCourseId() });
     } catch (error) {
         showMessage('添加失败: ' + error.message, 'error');
     }
@@ -2457,20 +2925,21 @@ async function handleAddVoter(event) {
 // 处理添加职务
 async function handleAddRole(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const data = Object.fromEntries(formData);
-    
+    const payload = withCourseId(data, getCurrentCourseId());
+
     try {
         await apiCall('/roles', {
             method: 'POST',
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
-        
+
         showMessage('职务添加成功', 'success');
         closeModal();
-        loadAdminRoles();
-        loadRoles();
+        await loadAdminRoles();
+        await loadRoles(getCurrentCourseId());
     } catch (error) {
         showMessage('添加失败: ' + error.message, 'error');
     }
@@ -2554,7 +3023,8 @@ async function handleFileImport(event) {
     try {
         const formData = new FormData();
         formData.append('file', file);
-        
+        formData.append('course_id', getCurrentCourseId() || '');
+
         const response = await authorizedFetch(API_BASE + '/voters/import', {
             method: 'POST',
             body: formData
@@ -2592,10 +3062,10 @@ async function handleFileImport(event) {
             
             // 刷新评价人列表
             if (result.success_count > 0) {
-                loadAdminVoters();
-                loadVoters();
+                await loadAdminVoters();
+                await loadVoters({ courseId: getCurrentCourseId() });
             }
-            
+
         } else {
             if (resultDiv) {
                 resultDiv.innerHTML = `
